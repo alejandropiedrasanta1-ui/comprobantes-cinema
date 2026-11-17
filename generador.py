@@ -33,7 +33,9 @@ def _autoprueba(reporte):
 def _verificar():
     """Arma la ventana completa sin mostrarla (sirve en una Mac sin PhotoCraft, p. ej. GitHub Actions)."""
     import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    if sys.platform != "darwin":
+        # En Mac no: la ventana sin bordes usa la vista nativa de Cocoa y se cae en modo offscreen
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
     import app
     qa = QApplication(sys.argv)

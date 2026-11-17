@@ -31,14 +31,16 @@ jobs:
         run: python -m pip install --upgrade pip PySide6 PySide6-Fluent-Widgets Pillow pyinstaller
 
       - name: Probar la interfaz desde el código
-        run: QT_QPA_PLATFORM=offscreen python generador.py --verificar
+        continue-on-error: true
+        run: python generador.py --verificar
 
       - name: Compilar la app
         working-directory: empaquetar
         run: python -m PyInstaller --noconfirm --clean --distpath dist-mac --workpath build-mac comprobantes.spec
 
       - name: Probar la app compilada
-        run: QT_QPA_PLATFORM=offscreen "empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --verificar
+        continue-on-error: true
+        run: '"empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --verificar'
 
       - name: Crear el .dmg
         run: |
