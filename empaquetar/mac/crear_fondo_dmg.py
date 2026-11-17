@@ -2,8 +2,8 @@
 
 Genera fondo.png (660x400) y fondo@2x.png (1320x800) junto a este archivo. Se ejecuta en Windows (usa Segoe UI)
 y las imágenes se guardan en el repositorio; la Mac solo las une en fondo.tiff con tiffutil.
-El ícono «Instalar Comprobantes» queda centrado en (330, 200): dmg_ajustes.py lo pone en (330, 176), que en
-Finder es el centro del ícono más su nombre.
+El ícono «Instalar Comprobantes» queda centrado en (330, 200) (dmg_ajustes.py) y Finder escribe su nombre
+unos 84 px más abajo, sobre la píldora roja.
 """
 import math
 import random

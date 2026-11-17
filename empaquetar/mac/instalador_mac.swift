@@ -420,7 +420,8 @@ final class Instalador: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ s: NSApplication) -> NSApplication.TerminateReply {
-        (av.estado == "instalando" && !esDemo) ? .terminateCancel : .terminateNow     // no se cierra a media instalación
+        // no se cierra a media instalación (sin ventana = ya estaba instalado y solo se abrió el programa)
+        (ventana != nil && av.estado == "instalando" && !esDemo) ? .terminateCancel : .terminateNow
     }
 
     func enviar(_ tipo: String, _ texto: String = "") {
