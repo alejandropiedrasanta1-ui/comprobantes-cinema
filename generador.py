@@ -46,9 +46,94 @@ def _verificar():
     return 0
 
 
+def _capturas(carpeta):
+    """Abre la ventana con datos de ejemplo inventados y guarda una imagen de cada pantalla."""
+    import subprocess
+    import tempfile
+    from PySide6.QtCore import QDate, QEventLoop, QLocale, QTimer, QTranslator, QLibraryInfo
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QApplication
+    from qfluentwidgets import FluentTranslator, setThemeColor
+    import app
+    import registro
+    from ui_ajustes import aplicar_tema
+
+    carpeta = Path(carpeta)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    rutas.BASE_DATOS = Path(tempfile.mkdtemp()) / "ejemplo.db"
+    hoy = date.today()
+    ejemplos = [("María y José", "Boda", "COMPLETO", "Hotel Casa Santo Domingo", 70, 3500, [600]),
+                ("Valeria López", "XV años", "INTERMEDIO", "Salón Los Arcos", 25, 2200, [600, 800]),
+                ("Daniel y Sofía", "Boda", "PREMIUM", "Finca El Zapote", 45, 5200, [600, 4600]),
+                ("Ana y Carlos", "Boda", "ESENCIAL", "Antigua Guatemala", 110, 1500, [600])]
+    from datetime import timedelta
+    for nombre, evento, paquete, lugar, dias, total, pagos in ejemplos:
+        cid = registro.nuevo_cliente(nombre, "+502 5555 0000", evento, paquete, lugar, hoy + timedelta(days=dias), total)
+        for i, monto in enumerate(pagos):
+            registro.agregar_pago(cid, hoy, monto, "Reserva" if i == 0 else "Abono", "")
+
+    qa = QApplication(sys.argv)
+    QLocale.setDefault(QLocale(QLocale.Spanish, QLocale.Guatemala))
+    trad = [FluentTranslator(QLocale(QLocale.Spanish, QLocale.Spain)), QTranslator()]
+    trad[1].load("qtbase_es", QLibraryInfo.path(QLibraryInfo.TranslationsPath))
+    for t in trad:
+        qa.installTranslator(t)
+    cfg = motor.cargar_config()
+    cfg["vista_en_vivo"] = False   # en la Mac de prueba no hay PhotoCraft: se ve la plantilla
+
+    def esperar(ms):
+        lazo = QEventLoop()
+        QTimer.singleShot(ms, lazo.quit)
+        lazo.exec()
+
+    for tema in ("Oscuro", "Claro"):
+        aplicar_tema(tema)
+        setThemeColor(QColor(app.COLOR_MARCA))
+        v = app.Ventana(cfg, revisar=False)
+        v.resize(1380, 880)
+        v.move(60, 60)
+        v.show()
+        v.raise_()
+        v.activateWindow()
+        esperar(1500)
+        n = v.nuevo
+        n.festejado.setText("María y José")
+        n.lugar.setText("Hotel Casa Santo Domingo, Antigua")
+        n.telefono.setText("+502 5555 0000")
+        n.fecha_evento.setDate(QDate.currentDate().addDays(70))
+        n.elegir_paquete("COMPLETO")
+        paginas = [("1_nuevo", lambda: n.abrir_bloque(n.b1)), ("2_paquete", lambda: n.abrir_bloque(n.b2)),
+                   ("3_clientes", lambda: v.switchTo(v.historial)), ("4_paquetes", lambda: v.switchTo(v.paquetes)),
+                   ("5_ajustes", lambda: v.switchTo(v.ajustes))]
+        if tema == "Claro":
+            paginas = paginas[:1] + paginas[2:3]
+        for nombre, accion in paginas:
+            accion()
+            if nombre == "3_clientes":
+                esperar(400)
+                v.historial.tabla.selectRow(1)
+            esperar(1200)
+            archivo = carpeta / f"{nombre}_{tema.lower()}.png"
+            g = v.frameGeometry()
+            # Foto de la pantalla real (con los botones de la ventana de Mac); si no hay permiso, la de Qt
+            hecho = False
+            if sys.platform == "darwin":
+                r = subprocess.run(["screencapture", "-x", "-R", f"{g.x()},{g.y()},{g.width()},{g.height()}",
+                                    str(archivo)], capture_output=True)
+                hecho = r.returncode == 0 and archivo.exists() and archivo.stat().st_size > 50_000
+            if not hecho:
+                v.grab().save(str(archivo))
+            print("captura:", archivo.name)
+        v.close()
+        esperar(500)
+    return 0
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "--verificar":
         sys.exit(_verificar())
+    if len(sys.argv) == 3 and sys.argv[1] == "--capturas":
+        sys.exit(_capturas(sys.argv[2]))
     if len(sys.argv) == 3 and sys.argv[1] == "--autoprueba":
         try:
             import pyi_splash

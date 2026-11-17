@@ -1,6 +1,8 @@
 #!/bin/bash
-# Crea "GENERADOR/INSTALADOR/Comprobantes Cinema (Mac).dmg" con la app lista para arrastrar a Aplicaciones.
+# Crea en GENERADOR/INSTALADOR el instalador de un clic para Mac:
+#   "Instalar Comprobantes Cinema (Mac <tipo>) <versión>.dmg"
 # Uso en la Mac: abre Terminal, escribe  bash  (con un espacio), arrastra este archivo y pulsa Enter.
+# (Normalmente no hace falta: GitHub Actions lo crea solo en cada cambio.)
 set -e
 cd "$(dirname "$0")"
 RAIZ="$(cd .. && pwd)"
@@ -10,31 +12,21 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "[1/4] Preparando entorno de Python (solo la primera vez tarda)..."
+echo "[1/3] Preparando entorno de Python (solo la primera vez tarda)..."
 VENV="$HOME/Library/Caches/comprobantes-cinema-venv"
 python3 -m venv "$VENV"
 source "$VENV/bin/activate"
 python -m pip install --quiet --upgrade pip
 python -m pip install --quiet PySide6 PySide6-Fluent-Widgets Pillow pyinstaller
 
-echo "[2/4] Empaquetando la app..."
+echo "[2/3] Empaquetando la app..."
 python -m PyInstaller --noconfirm --clean --distpath dist-mac --workpath build-mac comprobantes.spec
 
-echo "[3/4] Creando el instalador .dmg..."
-TMP="$(mktemp -d)"
-cp -R "dist-mac/Comprobantes Cinema.app" "$TMP/"
-ln -s /Applications "$TMP/Aplicaciones"
+echo "[3/3] Creando el instalador de un clic..."
 SALIDA="$(cd "$RAIZ/.." && pwd)/INSTALADOR"
-mkdir -p "$SALIDA"
-DMG="$SALIDA/Comprobantes Cinema (Mac) 2.1.0.dmg"
-rm -f "$DMG"
-hdiutil create -volname "Comprobantes Cinema" -srcfolder "$TMP" -ov -format UDZO "$DMG" >/dev/null
-rm -rf "$SALIDA/Comprobantes Cinema.app"
-cp -R "dist-mac/Comprobantes Cinema.app" "$SALIDA/"   # la app lista para abrir sin instalar
-rm -rf "$TMP" dist-mac build-mac
+DMG=$(bash crear_instalador_mac.sh "$PWD/dist-mac/Comprobantes Cinema.app" "$SALIDA")
+rm -rf dist-mac build-mac
 
-echo "[4/4] Listo:"
-echo "  $DMG"
 echo
-echo "Para instalar: abre el .dmg y arrastra «Comprobantes Cinema» a Aplicaciones."
-echo "La primera vez ábrelo con clic derecho > Abrir (la app no está firmada por Apple)."
+echo "Listo: $DMG"
+echo "Para instalar: abre el .dmg y haz doble clic en «Instalar Comprobantes Cinema»."

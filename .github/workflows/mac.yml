@@ -31,7 +31,6 @@ jobs:
         run: python -m pip install --upgrade pip PySide6 PySide6-Fluent-Widgets Pillow pyinstaller
 
       - name: Probar la interfaz desde el código
-        continue-on-error: true
         run: python generador.py --verificar
 
       - name: Compilar la app
@@ -39,22 +38,44 @@ jobs:
         run: python -m PyInstaller --noconfirm --clean --distpath dist-mac --workpath build-mac comprobantes.spec
 
       - name: Probar la app compilada
-        continue-on-error: true
         run: '"empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --verificar'
 
-      - name: Crear el .dmg
+      - name: Capturas de pantalla
+        continue-on-error: true
+        run: '"empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --capturas "$PWD/capturas"'
+
+      - name: Crear el instalador de un clic (.dmg)
         run: |
-          VERSION=$(python -c "import rutas; print(rutas.VERSION)")
-          SUFIJO=$([ "$(uname -m)" = "arm64" ] && echo "Apple Silicon" || echo "Intel")
-          mkdir -p dmg
-          cp -R "empaquetar/dist-mac/Comprobantes Cinema.app" dmg/
-          ln -s /Applications dmg/Aplicaciones
-          hdiutil create -volname "Comprobantes Cinema" -srcfolder dmg -ov -format UDZO \
-            "Comprobantes Cinema (Mac ${SUFIJO}) ${VERSION}.dmg"
-          ls -lh *.dmg
+          chmod +x empaquetar/crear_instalador_mac.sh
+          empaquetar/crear_instalador_mac.sh "$PWD/empaquetar/dist-mac/Comprobantes Cinema.app" "$PWD/salida"
+          ls -lh salida
 
       - uses: actions/upload-artifact@v4
         with:
-          name: comprobantes-cinema-mac-${{ runner.arch }}
-          path: "*.dmg"
+          name: instalador-mac-${{ runner.arch }}
+          path: salida/*.dmg
+          retention-days: 30
+
+      - name: Probar el instalador como lo haría el usuario
+        run: |
+          set -x
+          DMG=$(ls salida/*.dmg | head -1)
+          hdiutil attach "$DMG" -nobrowse
+          ls "/Volumes/Comprobantes Cinema"
+          ( sleep 4; screencapture -x "$PWD/capturas/6_instalando.png" ) &
+          open -W "/Volumes/Comprobantes Cinema/Instalar Comprobantes Cinema.app"
+          sleep 6
+          test -d "/Applications/Comprobantes Cinema.app" && echo "OK: instalado en Aplicaciones"
+          defaults read com.apple.dock persistent-apps | grep -q "Comprobantes Cinema.app" && echo "OK: está en el Dock"
+          pgrep -f "Comprobantes Cinema.app/Contents/MacOS" && echo "OK: el programa se abrió"
+          screencapture -x "$PWD/capturas/7_instalado_dock.png" || true
+          sleep 2
+          if [ -d "/Volumes/Comprobantes Cinema" ]; then echo "AVISO: el disco sigue montado"; else echo "OK: el disco se expulsó"; fi
+          pkill -f "Comprobantes Cinema.app/Contents/MacOS" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-mac-${{ runner.arch }}
+          path: capturas/*.png
           retention-days: 30

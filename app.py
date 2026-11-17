@@ -20,7 +20,7 @@ COLOR_MARCA = "#e0262b"
 
 
 class Ventana(FluentWindow):
-    def __init__(self, cfg):
+    def __init__(self, cfg, revisar=True):
         super().__init__()
         self.cfg = cfg
         self.revision = None
@@ -58,7 +58,8 @@ class Ventana(FluentWindow):
 
         pantalla = QApplication.primaryScreen().availableGeometry()
         self.move(pantalla.center() - self.rect().center())
-        QTimer.singleShot(600, self.revisar_entorno)
+        if revisar:
+            QTimer.singleShot(600, self.revisar_entorno)
 
     def _nuevo(self):
         self.switchTo(self.nuevo)

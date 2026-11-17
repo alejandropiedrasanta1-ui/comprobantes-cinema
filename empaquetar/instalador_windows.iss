@@ -1,4 +1,5 @@
-; Instalador de Windows (Inno Setup 6). Se compila con "CREAR INSTALADOR WINDOWS.bat".
+; Instalador de Windows de UN CLIC (Inno Setup 6). Se compila con "CREAR INSTALADOR WINDOWS.bat".
+; Doble clic -> solo la barra de progreso -> instala, crea accesos directos, abre el programa y se cierra.
 #define AppName "Comprobantes Cinema Productions"
 #define AppVersion "2.1.0"
 #define AppExe "Comprobantes Cinema.exe"
@@ -11,9 +12,18 @@ AppVerName={#AppName} {#AppVersion}
 AppPublisher=Cinema Productions
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
+; Sin pantallas: ni bienvenida, ni carpeta, ni "listo para instalar", ni "terminado"
+DisableWelcomePage=yes
+DisableDirPage=yes
 DisableProgramGroupPage=yes
+DisableReadyPage=yes
+DisableFinishedPage=yes
+ShowLanguageDialog=no
+; Para el usuario actual: no pide permisos de administrador
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
+; Si el programa está abierto (actualización), se cierra solo
+CloseApplications=force
+RestartApplications=no
 OutputDir=..\..\INSTALADOR
 OutputBaseFilename=Instalar Comprobantes Cinema (Windows) {#AppVersion}
 SetupIconFile=..\recursos\icono.ico
@@ -22,14 +32,12 @@ UninstallDisplayName={#AppName}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+WizardSizePercent=100
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
-
-[Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
 Source: "dist\Comprobantes Cinema\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -41,24 +49,8 @@ Source: "..\recursos\fuentes\MYRIADPRO-REGULAR.OTF"; DestDir: "{autofonts}"; Fon
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
-
-[Code]
-function PhotoCraftInstalado(): Boolean;
-begin
-  Result := FileExists(ExpandConstant('{commonpf64}\ArtCraft\PhotoCraft\photocraft-cli.exe')) or
-            FileExists(ExpandConstant('{commonpf32}\ArtCraft\PhotoCraft\photocraft-cli.exe')) or
-            FileExists(ExpandConstant('{localappdata}\Programs\ArtCraft\PhotoCraft\photocraft-cli.exe'));
-end;
-
-function InitializeSetup(): Boolean;
-begin
-  Result := True;
-  if not PhotoCraftInstalado() then
-    MsgBox('Aviso: no se encontró PhotoCraft en esta computadora.' + #13#10 + #13#10 +
-           'El programa lo necesita para crear los comprobantes. Puedes instalar PhotoCraft después ' +
-           'o indicar dónde está con el botón «PhotoCraft…» del programa.', mbInformation, MB_OK);
-end;
+; Al terminar abre el programa (si falta PhotoCraft, el programa mismo lo avisa)
+Filename: "{app}\{#AppExe}"; Flags: nowait skipifsilent
