@@ -161,7 +161,7 @@ struct BotonPildora: ButtonStyle {
     }
 }
 
-let ANCHO: CGFloat = 400, ALTO: CGFloat = 330   // minimalista: anillo, una palabra y el porcentaje
+let ANCHO: CGFloat = 400, ALTO: CGFloat = 350   // minimalista: anillo, una palabra y el porcentaje
 
 struct VistaInstalador: View {
     @ObservedObject var av: Avance
@@ -179,12 +179,13 @@ struct VistaInstalador: View {
                     .fill(RadialGradient(colors: [colorEstado.opacity(0.18 + 0.05 * sin(t * 1.6)), colorEstado.opacity(0)],
                                          center: .center, startRadius: 0, endRadius: 220))
                     .frame(width: ANCHO, height: ALTO).offset(y: -100)
-                VStack(spacing: 0) {
-                    anillo(t).frame(width: 150, height: 150).padding(.top, 44)
-                    titulo.padding(.top, 22)
+                VStack(spacing: 0) {   // centrado en la ventana; «Cerrar» (solo si falla) abajo
+                    Spacer(minLength: 24)
+                    anillo(t).frame(width: 150, height: 150)
+                    titulo.padding(.top, 20)
                     detalle.padding(.top, 8).padding(.horizontal, 32)
                     cifra.padding(.top, 2)
-                    Spacer(minLength: 0)
+                    Spacer(minLength: 14)
                     pie.padding(.bottom, 22)
                 }
                 .frame(width: ANCHO, height: ALTO)
@@ -245,7 +246,8 @@ struct VistaInstalador: View {
     @ViewBuilder var detalle: some View {
         if av.estado == "error" {
             Text(av.mensaje).font(.system(size: 13, weight: .medium)).foregroundColor(ERROR)
-                .multilineTextAlignment(.center).lineLimit(3).frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
         } else if av.estado == "instalando" && !av.aviso.isEmpty {
             Text(av.aviso).font(.system(size: 13, weight: .medium)).foregroundColor(AMBAR.opacity(0.9))
                 .multilineTextAlignment(.center).lineLimit(2).frame(maxWidth: .infinity)
