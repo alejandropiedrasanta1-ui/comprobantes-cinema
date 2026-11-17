@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
-from PySide6.QtCore import QMimeData, QPointF, QRectF, QSize, Qt, QThread, QUrl, Signal
+from PySide6.QtCore import QEasingCurve, QMimeData, QPointF, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtGui import (QColor, QDesktopServices, QFont, QImage, QImageReader, QLinearGradient, QPainter,
                            QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import (QApplication, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLayout,
@@ -196,7 +196,30 @@ class ZonaCaptura(QWidget):
         self.error = False
         self._mini = None
         self._encima = False
+        self._t_encima = 0.0         # 0 → 1 al pasar el mouse
+        self._t_mini = 1.0           # 0 → 1: la miniatura entra con fundido y crece un poco
+        self._arrastrando = False    # hay una imagen encima, a punto de soltarse
+        self._fase = 0.0
+        self._hormigas = QTimer(self)                 # el borde punteado avanza mientras arrastras
+        self._hormigas.setInterval(40)
+        self._hormigas.timeout.connect(self._avanzar_borde)
         self.limpiar()
+
+    def _avanzar_borde(self):
+        self._fase = (self._fase + 1) % 9
+        self.update()
+
+    def _poner_t(self, campo, v):
+        setattr(self, campo, v)
+        self.update()
+
+    def _arrastre(self, si):
+        self._arrastrando = si
+        if si and estilo.ANIMAR:
+            self._hormigas.start()
+        else:
+            self._hormigas.stop()
+        self.update()
 
     def limpiar(self):
         self.ruta = None
@@ -209,35 +232,56 @@ class ZonaCaptura(QWidget):
 
     def enterEvent(self, e):
         self._encima = True
-        self.update()
+        estilo.animar(self, "_ani_encima", self._t_encima, 1.0, 150, lambda v: self._poner_t("_t_encima", v))
 
     def leaveEvent(self, e):
         self._encima = False
-        self.update()
+        estilo.animar(self, "_ani_encima", self._t_encima, 0.0, 240, lambda v: self._poner_t("_t_encima", v))
 
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
         r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
-        if self.ruta:
+        if self._arrastrando:
+            pen = QPen(QColor(estilo.ROJO), 1.8, Qt.CustomDashLine)
+            pen.setDashPattern([5, 4])
+            pen.setDashOffset(-self._fase)
+            p.setPen(pen)
+            p.setBrush(estilo.alfa(estilo.ROJO, 26))
+        elif self.ruta:
             p.setPen(QPen(estilo.alfa(estilo.VERDE, 110), 1.2))
             p.setBrush(estilo.c("sup2"))
         else:
-            color = QColor(estilo.ROJO) if self.error else estilo.c("texto2" if self._encima else "borde2")
+            color = (QColor(estilo.ROJO) if self.error else
+                     estilo.mezclar(estilo.c("borde2"), estilo.c("texto2"), self._t_encima))
             pen = QPen(color, 1.4, Qt.CustomDashLine)
             pen.setDashPattern([5, 4])
             p.setPen(pen)
             p.setBrush(estilo.alfa(estilo.ROJO, 14) if self.error else
-                       (estilo.c("sup2") if self._encima else Qt.NoBrush))
+                       estilo.alfa(estilo.c("sup2"), int(255 * self._t_encima)))
         p.drawRoundedRect(r, 12, 12)
         f = QFont(self.font())
+        if self._arrastrando:                         # «suelta aquí»
+            f.setPixelSize(14)
+            f.setWeight(QFont.DemiBold)
+            p.setFont(f)
+            p.setPen(QColor(estilo.ROJO_CLARO))
+            p.drawText(r, Qt.AlignCenter, "Suelta la imagen aquí")
+            p.end()
+            return
         if self.ruta and self._mini:
             alto = r.height() - 20
             ancho = min(alto * self._mini.width() / max(self._mini.height(), 1), r.width() * 0.4)
             caja = QRectF(r.left() + 10, r.top() + 10, ancho, alto)
+            t = self._t_mini
+            if t < 1:                                 # entra creciendo de 92 % a 100 %
+                k = 0.92 + 0.08 * t
+                caja = QRectF(caja.center().x() - caja.width() * k / 2, caja.center().y() - caja.height() * k / 2,
+                              caja.width() * k, caja.height() * k)
             camino = QPainterPath()
             camino.addRoundedRect(caja, 8, 8)
             p.save()
+            p.setOpacity(t)
             p.setClipPath(camino)
             p.drawPixmap(caja, self._mini, QRectF(self._mini.rect()))
             p.restore()
@@ -264,6 +308,30 @@ class ZonaCaptura(QWidget):
             p.drawText(QRectF(x, cy - 8, r.right() - x - 10, 18), Qt.AlignLeft | Qt.AlignVCenter, nombre)
             p.drawText(QRectF(x, cy + 10, r.right() - x - 10, 18), Qt.AlignLeft | Qt.AlignVCenter,
                        f"Clic para cambiarla · {CTRL}V para pegar otra")
+        elif r.height() < 80:      # recuadro bajo: ícono y texto en un solo renglón
+            lado = 22
+            color_ico = QColor(estilo.ROJO) if self.error else estilo.c("texto2")
+            f.setPixelSize(13)
+            f.setWeight(QFont.DemiBold)
+            p.setFont(f)
+            titulo = "Falta la captura del pago" if self.error else "Arrastra la captura del pago"
+            ayuda = f"  ·  clic para buscarla · {CTRL}V para pegarla"
+            ancho_t = p.fontMetrics().horizontalAdvance(titulo)
+            g = QFont(f)
+            g.setPixelSize(12)
+            g.setWeight(QFont.Normal)
+            from PySide6.QtGui import QFontMetrics
+            ancho_a = QFontMetrics(g).horizontalAdvance(ayuda)
+            if lado + 10 + ancho_t + ancho_a > r.width() - 24:
+                ayuda, ancho_a = "", 0
+            x = r.center().x() - (lado + 10 + ancho_t + ancho_a) / 2
+            p.drawPixmap(QPointF(x, r.center().y() - lado / 2), estilo.pixmap_icono("recibo", color_ico, lado))
+            x += lado + 10
+            p.setPen(QColor(estilo.ROJO) if self.error else estilo.c("texto"))
+            p.drawText(QRectF(x, r.top(), ancho_t + 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter, titulo)
+            p.setFont(g)
+            p.setPen(estilo.c("texto3"))
+            p.drawText(QRectF(x + ancho_t, r.top(), ancho_a + 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter, ayuda)
         else:
             lado = 26
             color_ico = QColor(estilo.ROJO) if self.error else estilo.c("texto2")
@@ -318,14 +386,20 @@ class ZonaCaptura(QWidget):
         self.ruta = ruta
         self.error = False
         self._mini = QPixmap.fromImage(img)
-        self.update()
+        estilo.animar(self, "_ani_mini", 0.0, 1.0, 360, lambda v: self._poner_t("_t_mini", v),
+                      QEasingCurve.OutCubic)
         self.cambiada.emit(ruta)
 
     def dragEnterEvent(self, e):
         if e.mimeData().hasUrls() or e.mimeData().hasImage():
             e.acceptProposedAction()
+            self._arrastre(True)
+
+    def dragLeaveEvent(self, e):
+        self._arrastre(False)
 
     def dropEvent(self, e):
+        self._arrastre(False)
         for url in e.mimeData().urls():
             if url.toLocalFile().lower().endswith(EXT_IMAGEN):
                 self.usar(url.toLocalFile())
@@ -407,8 +481,8 @@ class TarjetaPaquete(Tarjeta):
         self.servicios = len(paquete.get("incluye", []))
         self.destacado = destacado
         self.color = QColor(COLOR_PAQUETE.get(clave, "#888888"))
-        self.setFixedHeight(96)
-        self.setMinimumWidth(118)
+        self.setFixedHeight(72)
+        self.setMinimumWidth(96)
         self.setToolTip(f"{self.nombre} · {q(self.precio)} · {self.servicios} servicios")
         self.clicked.connect(lambda: self.elegida.emit(self.clave))
 
@@ -436,40 +510,43 @@ class TarjetaPaquete(Tarjeta):
                    p.fontMetrics().elidedText(self.nombre, Qt.ElideRight, disponible))
         # círculo de selección
         circ = QRectF(w - 28, 12, 16, 16)
-        if angosta:
-            pass
-        elif self.seleccionada:
-            p.setPen(QPen(QColor(estilo.ROJO), 1.6))
+        if not angosta:            # el punto rojo crece con un pequeño rebote al elegirla
+            t = self._t_sel
+            p.setPen(QPen(estilo.mezclar(estilo.c("borde2"), QColor(estilo.ROJO), t), 1.4 + 0.2 * t))
             p.setBrush(Qt.NoBrush)
             p.drawEllipse(circ)
-            p.setPen(Qt.NoPen)
-            p.setBrush(QColor(estilo.ROJO))
-            p.drawEllipse(circ.adjusted(4, 4, -4, -4))
-        else:
-            p.setPen(QPen(estilo.c("borde2"), 1.4))
-            p.setBrush(Qt.NoBrush)
-            p.drawEllipse(circ)
-        p.setFont(estilo.fuente_numeros(21, QFont.Bold, self.font()))
+            if t > 0.01:
+                radio = 4 * min(1.15, t * 1.15) if t < 0.85 else 4 * (1.15 - (t - 0.85))
+                p.setPen(Qt.NoPen)
+                p.setBrush(QColor(estilo.ROJO))
+                p.drawEllipse(circ.center(), radio, radio)
+        # segundo renglón: precio a la izquierda; servicios (o «MÁS VENDIDO») a la derecha si caben
+        fn = estilo.fuente_numeros(20, QFont.Bold, self.font())
+        p.setFont(fn)
         p.setPen(estilo.c("texto"))
-        p.drawText(QRectF(14, 32, w - 24, 30), Qt.AlignLeft | Qt.AlignVCenter, q(self.precio))
-        f.setPixelSize(12)
-        f.setWeight(QFont.Normal)
-        p.setFont(f)
-        p.setPen(estilo.c("texto3"))
-        p.drawText(QRectF(14, h - 30, w - 24, 18), Qt.AlignLeft | Qt.AlignVCenter, f"{self.servicios} servicios")
+        fila = QRectF(12 if angosta else 14, 34, w - 24, 28)
+        p.drawText(fila, Qt.AlignLeft | Qt.AlignVCenter, q(self.precio))
+        libre = w - fila.left() - p.fontMetrics().horizontalAdvance(q(self.precio)) - 22
         if self.destacado:
             f.setPixelSize(9)
             f.setWeight(QFont.Bold)
             p.setFont(f)
-            texto = "MÁS VENDIDO"
-            ancho = p.fontMetrics().horizontalAdvance(texto) + 12
-            caja = QRectF(w - ancho - 10, h - 28, ancho, 16)
-            if caja.left() > 14 + p.fontMetrics().horizontalAdvance("12 servicios") + 30:
+            texto = "MÁS VENDIDO" if libre >= 82 else ("TOP" if libre >= 34 else "")
+            if texto:
+                ancho = p.fontMetrics().horizontalAdvance(texto) + 12
+                caja = QRectF(w - ancho - 10, fila.center().y() - 8, ancho, 16)
                 p.setPen(Qt.NoPen)
                 p.setBrush(QColor(estilo.ROJO))
                 p.drawRoundedRect(caja, 8, 8)
                 p.setPen(QColor("white"))
                 p.drawText(caja, Qt.AlignCenter, texto)
+        else:
+            f.setPixelSize(12)
+            f.setWeight(QFont.Normal)
+            p.setFont(f)
+            texto = f"{self.servicios} servicios" if libre >= 70 else (f"{self.servicios} serv." if libre >= 44 else "")
+            p.setPen(estilo.c("texto3"))
+            p.drawText(QRectF(0, fila.top(), w - 12, fila.height()), Qt.AlignRight | Qt.AlignVCenter, texto)
         p.end()
 
 
@@ -507,16 +584,23 @@ def color_avatar(nombre):
 
 
 class BarraPago(QWidget):
-    """Barra fina de cuánto lleva pagado (roja; verde si ya pagó todo)."""
+    """Barra fina de cuánto lleva pagado (roja; verde si ya pagó todo). Se llena con movimiento."""
 
     def __init__(self, pagado=0, total=0, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.pagado, self.total = pagado, total
+        self._frac = 0.0
         self.setFixedHeight(8)
 
     def poner(self, pagado, total):
         self.pagado, self.total = pagado, total
+        destino = min(pagado / total, 1) if total else 0
+        estilo.animar(self, "_ani", 0.0 if self._frac == destino else self._frac, destino, 650,
+                      self._paso, QEasingCurve.OutQuart)
+
+    def _paso(self, v):
+        self._frac = v
         self.update()
 
     def paintEvent(self, e):
@@ -526,9 +610,9 @@ class BarraPago(QWidget):
         p.setPen(Qt.NoPen)
         p.setBrush(estilo.c("sup3"))
         p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
-        frac = min(self.pagado / self.total, 1) if self.total else 0
-        p.setBrush(QColor(estilo.VERDE if frac >= 1 else estilo.ROJO))
-        p.drawRoundedRect(QRectF(r.left(), r.top(), max(r.width() * frac, r.height()), r.height()),
+        completo = self.total and self.pagado >= self.total
+        p.setBrush(QColor(estilo.VERDE if completo else estilo.ROJO))
+        p.drawRoundedRect(QRectF(r.left(), r.top(), max(r.width() * self._frac, r.height()), r.height()),
                           r.height() / 2, r.height() / 2)
         p.end()
 
@@ -539,16 +623,26 @@ def etiqueta_estado(estado):
 
 
 class MiniGrafico(QWidget):
-    """Gráfico diminuto de una tarjeta de indicador: línea con relleno, barras o puntos de calendario."""
+    """Gráfico diminuto de una tarjeta de indicador: línea con relleno, barras o puntos de calendario.
+    Al recibir datos nuevos se dibuja: la línea avanza, las barras crecen y los puntos aparecen en cascada."""
 
     def __init__(self, tipo="linea", color=None, parent=None):
         super().__init__(parent)
         self.tipo, self.color = tipo, color
         self.serie = []
+        self._p = 1.0
         self.setFixedSize(QSize(70, 40) if tipo == "puntos" else QSize(104, 40))
 
     def poner(self, serie):
-        self.serie = list(serie or [])
+        serie = list(serie or [])
+        if serie == self.serie:
+            return
+        self.serie = serie
+        estilo.animar(self, "_ani", 0.0, 1.0, 900 if self.tipo == "puntos" else 750, self._paso,
+                      QEasingCurve.OutCubic)
+
+    def _paso(self, v):
+        self._p = v
         self.update()
 
     def paintEvent(self, e):
@@ -558,20 +652,30 @@ class MiniGrafico(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         color = QColor(self.color) if self.color else estilo.c("texto2")
         w, h = self.width(), self.height()
+        prog = self._p
         if self.tipo == "puntos":      # días del mes: 0 nada, 1 hay evento, 2 hoy
             cols, lado = 7, 6
+            n = min(len(self.serie), 35)
             for i, v in enumerate(self.serie[:35]):
+                t = max(0.0, min(1.0, prog * 1.6 - i / max(n, 1) * 0.6))     # en cascada
+                if t <= 0:
+                    continue
                 x = (i % cols) * (lado + 4)
                 y = (i // cols) * (lado + 2.5)
+                col = QColor(estilo.ROJO) if v == 1 else (estilo.c("texto") if v == 2 else estilo.c("sup3"))
                 p.setPen(Qt.NoPen)
-                p.setBrush(QColor(estilo.ROJO) if v == 1 else (estilo.c("texto") if v == 2 else estilo.c("sup3")))
-                p.drawEllipse(QRectF(x, y, lado, lado))
+                p.setBrush(estilo.alfa(col, int(col.alpha() * t)))
+                m = lado * (1 - t) / 2
+                p.drawEllipse(QRectF(x + m, y + m, lado - 2 * m, lado - 2 * m))
         elif self.tipo == "barras":
             n = len(self.serie)
             maximo = max(self.serie) or 1
             ancho = (w - (n - 1) * 3) / n
             for i, v in enumerate(self.serie):
-                alto = max(3, (h - 2) * v / maximo)
+                t = max(0.0, min(1.0, prog * 1.5 - i * 0.06))
+                alto = max(3, (h - 2) * v / maximo) * t
+                if alto <= 0:
+                    continue
                 p.setPen(Qt.NoPen)
                 p.setBrush(color if i == n - 1 else estilo.alfa(color, 110))
                 p.drawRoundedRect(QRectF(i * (ancho + 3), h - alto, ancho, alto), 1.5, 1.5)
@@ -588,6 +692,7 @@ class MiniGrafico(QWidget):
             relleno.lineTo(pts[-1].x(), h)
             relleno.lineTo(pts[0].x(), h)
             relleno.closeSubpath()
+            p.setClipRect(QRectF(0, 0, w * prog, h))          # la línea «se dibuja» de izquierda a derecha
             degr = QLinearGradient(0, 0, 0, h)
             degr.setColorAt(0, estilo.alfa(color, 70))
             degr.setColorAt(1, estilo.alfa(color, 0))
@@ -597,14 +702,18 @@ class MiniGrafico(QWidget):
             p.setPen(QPen(color, 1.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
             p.setBrush(Qt.NoBrush)
             p.drawPath(camino)
-            p.setPen(Qt.NoPen)
-            p.setBrush(color)
-            p.drawEllipse(pts[-1], 2.6, 2.6)
+            if prog >= 0.98:
+                p.setClipping(False)
+                p.setPen(Qt.NoPen)
+                p.setBrush(estilo.alfa(color, 60))
+                p.drawEllipse(pts[-1], 5, 5)
+                p.setBrush(color)
+                p.drawEllipse(pts[-1], 2.6, 2.6)
         p.end()
 
 
 class Kpi(Tarjeta):
-    """Tarjeta de indicador: ícono en cuadrito, título, cifra grande y un mini gráfico."""
+    """Tarjeta de indicador: ícono en cuadrito, título, cifra grande (cuenta al cambiar) y un mini gráfico."""
 
     def __init__(self, titulo, color=None, icono_nombre="recibo", grafico="linea", parent=None):
         super().__init__(parent)
@@ -629,6 +738,11 @@ class Kpi(Tarjeta):
         if serie is not None:
             self.mini.poner(serie)
 
+    def poner_numero(self, valor, formato=str, serie=None):
+        self.valor.poner_numero(valor, formato, 700)
+        if serie is not None:
+            self.mini.poner(serie)
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self.mini.setVisible(self.width() > 250)
@@ -648,6 +762,7 @@ def etiqueta_valor(titulo, valor=""):
 
 class Pasos(QWidget):
     """«① Cliente y evento ✓ — ② Paquete ✓ — ③ Pago y captura»: verde lo listo, rojo el que sigue.
+    Al completarse un paso, su círculo verde aparece con rebote, el ✓ se dibuja y la línea se llena.
     Clic en un paso: elegido(índice). En ventanas angostas solo se ve el nombre del paso actual."""
     elegido = Signal(int)
 
@@ -655,12 +770,25 @@ class Pasos(QWidget):
         super().__init__(parent)
         self.titulos = list(titulos)
         self.completos = [False] * len(self.titulos)
+        self._t = [0.0] * len(self.titulos)     # 0 → 1: avance de la animación de «listo» de cada paso
         self._cajas = []
         self.setFixedHeight(28)
         self.setCursor(Qt.PointingHandCursor)
 
     def poner(self, completos):
-        self.completos = list(completos)
+        completos = list(completos)
+        for i, (antes, ahora) in enumerate(zip(self.completos, completos)):
+            if ahora and not antes:
+                estilo.animar(self, f"_ani{i}", 0.0, 1.0, 520,
+                              lambda v, i=i: self._paso(i, v), QEasingCurve.OutCubic)
+            elif not ahora:
+                getattr(self, f"_ani{i}", None) and getattr(self, f"_ani{i}").stop()
+                self._t[i] = 0.0
+        self.completos = completos
+        self.update()
+
+    def _paso(self, i, v):
+        self._t[i] = v
         self.update()
 
     def _actual(self):
@@ -685,11 +813,26 @@ class Pasos(QWidget):
             circ = QRectF(x, cy - d / 2, d, d)
             p.setPen(Qt.NoPen)
             if ok:
+                tt = self._t[i] if hasattr(self, f"_ani{i}") else 1.0
+                # rebote: crece de 0.55 a 1.15 y se asienta en 1.0
+                esc = 0.55 + tt / 0.6 * 0.6 if tt < 0.6 else 1.15 - 0.15 * (tt - 0.6) / 0.4
+                if tt < 1:                                     # halo que se expande y se apaga
+                    p.setBrush(estilo.alfa(estilo.VERDE, int(90 * (1 - tt))))
+                    p.drawEllipse(circ.center(), d / 2 + 8 * tt, d / 2 + 8 * tt)
                 p.setBrush(QColor(estilo.VERDE))
-                p.drawEllipse(circ)
-                p.setPen(QPen(QColor("white"), 1.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-                p.drawPolyline([QPointF(circ.left() + 5.5, cy), QPointF(circ.left() + 8.6, cy + 3.2),
-                                QPointF(circ.right() - 5, cy - 3.6)])
+                p.drawEllipse(circ.center(), d / 2 * esc, d / 2 * esc)
+                trazo = max(0.0, min(1.0, (tt - 0.3) / 0.55))  # el ✓ se dibuja de a poco
+                if trazo > 0:
+                    a = QPointF(circ.left() + 5.5, cy)
+                    b = QPointF(circ.left() + 8.6, cy + 3.2)
+                    c_ = QPointF(circ.right() - 5, cy - 3.6)
+                    p.setPen(QPen(QColor("white"), 1.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+                    if trazo < 0.4:
+                        k = trazo / 0.4
+                        p.drawLine(a, a + (b - a) * k)
+                    else:
+                        k = (trazo - 0.4) / 0.6
+                        p.drawPolyline([a, b, b + (c_ - b) * k])
             else:
                 if es_actual:
                     p.setBrush(QColor(estilo.ROJO))
@@ -715,8 +858,13 @@ class Pasos(QWidget):
             self._cajas.append(QRectF(x, 0, fin - x, self.height()))
             x = fin
             if i < len(self.titulos) - 1:
-                p.setPen(QPen(QColor(estilo.VERDE) if ok else estilo.c("borde2"), 1.4))
-                p.drawLine(QPointF(x + 8, cy), QPointF(x + unir - 8, cy))
+                x0, x1 = x + 8, x + unir - 8
+                p.setPen(QPen(estilo.c("borde2"), 1.4))
+                p.drawLine(QPointF(x0, cy), QPointF(x1, cy))
+                if ok:                                          # la línea verde avanza al completarse
+                    tt = self._t[i] if hasattr(self, f"_ani{i}") else 1.0
+                    p.setPen(QPen(QColor(estilo.VERDE), 1.6))
+                    p.drawLine(QPointF(x0, cy), QPointF(x0 + (x1 - x0) * tt, cy))
                 x += unir
         p.end()
 
@@ -745,11 +893,11 @@ class Bloque(Tarjeta):
         self.abierto = True
         self.completo = False
         self.numero = numero
-        v = QVBoxLayout(self)
-        v.setContentsMargins(20, 16, 20, 18)
-        v.setSpacing(14)
+        v = self.v_bloque = QVBoxLayout(self)
+        v.setContentsMargins(18, 12, 18, 14)
+        v.setSpacing(10)
         self.cab = _Cabecera()
-        h = QHBoxLayout(self.cab)
+        h = self.h_cab = QHBoxLayout(self.cab)
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(10)
         if icono_nombre:
@@ -769,12 +917,20 @@ class Bloque(Tarjeta):
         self.contenido = QWidget()
         self.cuerpo = QVBoxLayout(self.contenido)
         self.cuerpo.setContentsMargins(0, 0, 0, 0)
-        self.cuerpo.setSpacing(12)
+        self.cuerpo.setSpacing(8)
         v.addWidget(self.contenido)
 
+    def apretar(self, si):
+        """Menos aire (ventanas bajas, para que todo quepa sin desplazarse)."""
+        self.v_bloque.setContentsMargins(*((16, 9, 16, 10) if si else (18, 12, 18, 14)))
+        self.v_bloque.setSpacing(7 if si else 10)
+
+    def en_cabecera(self, w):
+        """Pone un control en la cabecera, antes de la píldora de estado (ahorra un renglón)."""
+        self.h_cab.insertWidget(self.h_cab.count() - 1, w, 0, Qt.AlignVCenter)
+
     def abrir(self, si):
-        self.resaltada = si and not self.completo
-        self.update()
+        self.resaltar(si and not self.completo)
 
     def poner_estado(self, completo, resumen, falta=None):
         self.completo = completo
@@ -782,7 +938,7 @@ class Bloque(Tarjeta):
         self.setToolTip(resumen)
         if completo:
             self.estado.poner("Listo", estilo.VERDE)
-            self.resaltada = False
+            self.resaltar(False)
         else:
             self.estado.poner(("Falta " + falta) if falta else "Pendiente", estilo.AMBAR if falta else None)
         self.update()

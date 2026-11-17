@@ -3,10 +3,11 @@ import calendar
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QPointF, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QDate, QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import (QAbstractItemView, QBoxLayout, QHBoxLayout, QHeaderView, QLabel, QListWidgetItem,
-                               QStyle, QStyledItemDelegate, QTableWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QBoxLayout, QGraphicsOpacityEffect, QHBoxLayout, QHeaderView,
+                               QLabel, QListWidgetItem, QStyle, QStyledItemDelegate, QTableWidgetItem, QVBoxLayout,
+                               QWidget)
 from qfluentwidgets import (CalendarPicker, CaptionLabel, FlowLayout, FluentIcon as FIF,
                             IndeterminateProgressRing, ListItemDelegate, ListWidget, MessageBox, PrimaryPushButton, PushButton,
                             SearchLineEdit, SmoothScrollArea, StrongBodyLabel, SubtitleLabel,
@@ -223,19 +224,39 @@ class ChipFiltro(QWidget):
         p.end()
 
 
-class _Ilustracion(QLabel):
-    """La ilustración de «aún no hay clientes» (Higgsfield), escalada a su caja."""
+class _Ilustracion(estilo.Animacion):
+    """«Aún no hay clientes»: recibos flotando (GIF animado de Higgsfield, oscuro o claro según el tema).
+    Se anima mientras está a la vista."""
+
+    def __init__(self, ancho, parent=None):
+        super().__init__("vacio", QSize(ancho, int(ancho * 288 / 384)), parent=parent)
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self.iniciar()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self.detener()
+
+
+class _MarcoIlustracion(QWidget):
+    """Tarjeta redondeada del mismo color que el fondo del GIF: el recuadro del GIF no se nota."""
 
     def __init__(self, ancho, parent=None):
         super().__init__(parent)
-        pm = QPixmap(str(rutas.recurso("recursos/ilustracion_vacio.png")))
-        if not pm.isNull():
-            dpr = self.devicePixelRatioF() or 2
-            pm = pm.scaledToWidth(int(ancho * dpr), Qt.SmoothTransformation)
-            pm.setDevicePixelRatio(dpr)
-            self.setPixmap(pm)
-        self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet("background:transparent")
+        self.ilus = _Ilustracion(ancho)
+        h = QHBoxLayout(self)
+        h.setContentsMargins(16, 12, 16, 12)
+        h.addWidget(self.ilus)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(QPen(estilo.c("borde"), 1))
+        p.setBrush(self.ilus.fondo)
+        p.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 22, 22)
+        p.end()
 
 
 class HistorialInterface(QWidget):
@@ -330,7 +351,7 @@ class HistorialInterface(QWidget):
         ve = QVBoxLayout(self.vacio)
         ve.setSpacing(10)
         ve.addStretch(1)
-        ve.addWidget(_Ilustracion(300), 0, Qt.AlignHCenter)
+        ve.addWidget(_MarcoIlustracion(300), 0, Qt.AlignHCenter)
         ve.addWidget(SubtitleLabel("Aquí aparecerán tus clientes"), 0, Qt.AlignHCenter)
         ve.addWidget(CaptionLabel("Cada comprobante que generes queda guardado con su saldo y sus abonos."),
                      0, Qt.AlignHCenter)
@@ -355,6 +376,10 @@ class HistorialInterface(QWidget):
         cont = QWidget()
         cont.setStyleSheet("background:transparent")
         scroll.setWidget(cont)
+        self.efecto_detalle = QGraphicsOpacityEffect(cont)    # fundido al cambiar de cliente
+        self.efecto_detalle.setOpacity(1.0)
+        self.efecto_detalle.setEnabled(False)
+        cont.setGraphicsEffect(self.efecto_detalle)
         pv = QVBoxLayout(self.panel)
         pv.setContentsMargins(0, 0, 0, 0)
         pv.addWidget(scroll)
@@ -504,9 +529,9 @@ class HistorialInterface(QWidget):
         r = registro.resumen()
         todos = registro.clientes("")
         cobrar, puntos, comprobantes = self._series(todos)
-        self.k_cobrar.poner(q(r["por_cobrar"]), cobrar)
-        self.k_mes.poner(str(r["eventos_mes"]), puntos)
-        self.k_comp.poner(str(r["comprobantes"]), comprobantes)
+        self.k_cobrar.poner_numero(int(r["por_cobrar"]), q, cobrar)      # las cifras cuentan al cambiar
+        self.k_mes.poner_numero(int(r["eventos_mes"]), str, puntos)
+        self.k_comp.poner_numero(int(r["comprobantes"]), str, comprobantes)
         buscados = registro.clientes(self.buscar.text())
         for nombre, chip in self.chips.items():
             chip.poner(n=len(buscados) if nombre == "Todos" else sum(c.estado == nombre for c in buscados),
@@ -546,9 +571,18 @@ class HistorialInterface(QWidget):
         filas = self.tabla.selectionModel().selectedRows()
         self._detalle(self.clientes[filas[0].row()] if filas else None)
 
+    def _fundir_detalle(self):
+        """El panel de detalle aparece con un fundido corto (sin efecto mientras está quieto: no gasta)."""
+        self.efecto_detalle.setEnabled(True)
+        estilo.animar(self, "_ani_detalle", 0.25, 1.0, 260, self.efecto_detalle.setOpacity, QEasingCurve.OutCubic,
+                      lambda: self.efecto_detalle.setEnabled(False))
+
     def _detalle(self, c):
+        anterior = self.actual.id if self.actual else None
         self.actual = c
         hay = c is not None
+        if (c.id if hay else None) != anterior and self.isVisible():
+            self._fundir_detalle()
         for w in (self.b_ver, self.b_copiar, self.b_wa, self.b_borrar, self.lista):
             w.setEnabled(hay)
         for w in (self.d_avatar, self.d_barra, self.d_progreso, self.caja_saldo, self.d_chips):
@@ -571,7 +605,7 @@ class HistorialInterface(QWidget):
         porcentaje = int(100 * c.pagado / c.total) if c.total else 0
         self.d_progreso.setText(f"{q(c.pagado)} de {q(c.total)} pagado ({porcentaje}%)")
         self.d_barra.poner(c.pagado, c.total)
-        self.d_saldo.setText(q(c.saldo))
+        self.d_saldo.poner_numero(int(c.saldo), q)
         self.d_saldo.poner_color(estilo.ROJO if c.saldo > 0 else estilo.VERDE)
         self.lista.clear()
         pagos = registro.pagos(c.id)

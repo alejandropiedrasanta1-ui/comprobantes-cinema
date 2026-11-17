@@ -19,7 +19,7 @@ from estilo import Icono, Pildora, Separador, Tarjeta
 from ui_comun import CTRL, Monto, abrir, aviso
 
 TEMAS = {"Oscuro": Theme.DARK, "Claro": Theme.LIGHT, "Automático (como el sistema)": Theme.AUTO}
-SECCIONES = [("comprobantes", "Comprobantes", "recibo"), ("vista", "Vista previa", "galeria"),
+SECCIONES = [("comprobantes", "Comprobantes", "recibo"), ("vista", "Vista y movimiento", "galeria"),
              ("photocraft", "PhotoCraft", "camara"), ("fuentes", "Fuentes del diseño", "album"),
              ("apariencia", "Apariencia", "ajustes"), ("datos", "Datos y copias", "carpeta")]
 
@@ -283,10 +283,18 @@ class AjustesInterface(QWidget):
         self.vivo.setOffText("No")
         self.vivo.setChecked(bool(cfg.get("vista_en_vivo", True)))
         self.vivo.checkedChanged.connect(lambda si: self.vista_cambiada.emit(si))
-        self._grupo(v, "vista", "Vista previa", [
+        self.animaciones = SwitchButton()
+        self.animaciones.setOnText("Sí")
+        self.animaciones.setOffText("No")
+        self.animaciones.setChecked(bool(cfg.get("animaciones", True)))
+        self.animaciones.checkedChanged.connect(self.cambiar_animaciones)
+        self._grupo(v, "vista", "Vista previa y movimiento", [
             _fila("galeria", "Vista previa en vivo",
                   "El comprobante se actualiza mientras escribes (≈0,2 s por cambio con PhotoCraft abierto)",
-                  self.vivo)])
+                  self.vivo),
+            _fila("chispa", "Animaciones",
+                  "Transiciones suaves, montos que cuentan y la claqueta al generar (apágalas si prefieres todo quieto)",
+                  self.animaciones)])
 
         # PhotoCraft
         self.e_pc = Pildora("Revisando…")
@@ -475,6 +483,11 @@ class AjustesInterface(QWidget):
             aviso(self, "warning", "No encontré las fuentes",
                   "En esa carpeta no están LEMONMILK-Bold.otf, GetVoIP Grotesque.otf ni MYRIADPRO-*.OTF.", 8000)
         self.revisar_fuentes()
+
+    def cambiar_animaciones(self, si):
+        estilo.ANIMAR = si
+        self.cfg["animaciones"] = si
+        motor.guardar_preferencia("animaciones", si)
 
     def _marcar_tema(self, nombre):
         for n, t in self.temas.items():

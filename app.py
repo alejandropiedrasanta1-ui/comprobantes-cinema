@@ -55,6 +55,7 @@ class Ventana(MSFluentWindow):
         super().__init__()
         self.cfg = cfg
         self.revision = None
+        estilo.ANIMAR = bool(cfg.get("animaciones", True))
         self.setWindowTitle("Comprobantes · Cinema Productions")
         self.setWindowIcon(QIcon(str(rutas.recurso("recursos/icono.png"))))
         # Fondo grafito parejo (sin Mica: en Windows 11 teñía la ventana con el fondo de pantalla)

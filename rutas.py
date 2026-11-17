@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 APP = "Comprobantes Cinema Productions"
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 ES_WINDOWS = sys.platform.startswith("win")
 ES_MAC = sys.platform == "darwin"
 CONGELADO = getattr(sys, "frozen", False)
