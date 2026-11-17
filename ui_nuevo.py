@@ -60,8 +60,10 @@ class NuevoInterface(QWidget):
         self.cliente_id = None      # para corregir sin duplicar si se vuelve a generar
         self.sin_generar = False    # hubo cambios después de generar
         self.trabajo = None
-        self.vista_trabajo = None
+        self.vista_trabajo = None   # el último hilo de vista lanzado
+        self.vista_ocupada = False  # hay una vista en camino (hasta que llega listo/fallo)
         self.vista_pendiente = False
+        self._hilos_vista = set()   # hilos vivos: se sueltan recién cuando terminan del todo
         self.vista_ruta = None
         self.n_vista = 0
         self.zoom = False
@@ -280,15 +282,16 @@ class NuevoInterface(QWidget):
         raiz.addWidget(barra)
 
         # ================= Señales =================
-        # Vista en vivo: se actualiza 0,35 s después de la última tecla y, si sigues escribiendo,
-        # al menos cada 0,9 s (no hay que esperar a dejar de escribir para ver el cambio).
+        # Vista en vivo: cada tecla pide la vista casi de inmediato (30 ms juntan los cambios que llegan
+        # a la vez, p. ej. al pegar o limpiar). Si PhotoCraft aún pinta la anterior, la nueva espera su
+        # turno con los datos más recientes; el tope evita que una racha de teclas la posponga.
         self.temporizador = QTimer(self)
         self.temporizador.setSingleShot(True)
-        self.temporizador.setInterval(350)
+        self.temporizador.setInterval(30)
         self.temporizador.timeout.connect(self._render_vista)
         self.tope_vista = QTimer(self)
         self.tope_vista.setSingleShot(True)
-        self.tope_vista.setInterval(900)
+        self.tope_vista.setInterval(200)
         self.tope_vista.timeout.connect(self._render_vista)
         self.aviso_ring = QTimer(self)   # el anillo solo aparece si la vista tarda (sin parpadeos)
         self.aviso_ring.setSingleShot(True)
@@ -407,22 +410,38 @@ class NuevoInterface(QWidget):
         self.tope_vista.stop()
         if not self.en_vivo.isChecked():
             return
-        if self.vista_trabajo and self.vista_trabajo.isRunning():
+        # Bandera propia y no isRunning(): «listo» llega cuando el hilo aún no termina run(), y con
+        # isRunning() la vista siguiente quedaba en espera sin que nadie la lanzara (vista congelada).
+        if self.vista_ocupada:
             self.vista_pendiente = True
             return
         self.vista_pendiente = False
+        self.vista_ocupada = True
         self.n_vista += 1
         destino = Path(tempfile.gettempdir()) / f"cinema_vista_{self.n_vista % 2}.jpg"
         self.aviso_ring.start()
         if self.vista_ruta is None and (not self.ultimo or self.sin_generar):
             self.estado.setText("Preparando la vista previa…")
-        self.vista_trabajo = Trabajo(self._datos(para_vista=True), self.cfg, destino=str(destino), calidad=80,
-                                     vista=True)
-        self.vista_trabajo.listo.connect(self._vista_lista)
-        self.vista_trabajo.fallo.connect(self._vista_fallo)
-        self.vista_trabajo.start()
+        hilo = Trabajo(self._datos(para_vista=True), self.cfg, destino=str(destino), calidad=80,
+                       vista=True, lado=self._lado_vista())
+        hilo.listo.connect(self._vista_lista)
+        hilo.fallo.connect(self._vista_fallo)
+        hilo.finished.connect(lambda h=hilo: self._hilo_vista_terminado(h))
+        self._hilos_vista.add(hilo)
+        self.vista_trabajo = hilo
+        hilo.start()
+
+    def _hilo_vista_terminado(self, hilo):
+        hilo.wait()   # ya está saliendo de run(): así no se destruye un QThread vivo
+        self._hilos_vista.discard(hilo)
+        if hilo is self.vista_trabajo and self.vista_ocupada:   # terminó sin avisar listo/fallo
+            self.vista_ocupada = False
+            self._parar_ring()
+            if self.vista_pendiente:
+                self._render_vista()
 
     def _vista_lista(self, ruta):
+        self.vista_ocupada = False
         if self.ultimo and not self.sin_generar:
             self._parar_ring()
             return  # se está mostrando el comprobante final
@@ -444,6 +463,7 @@ class NuevoInterface(QWidget):
         self.ring.hide()
 
     def _vista_fallo(self, msg):
+        self.vista_ocupada = False
         self._parar_ring()
         if self.vista_pendiente:   # el dato cambió mientras tanto: se reintenta con el nuevo
             self._render_vista()
@@ -467,6 +487,15 @@ class NuevoInterface(QWidget):
         self.pix = QPixmap.fromImage(QImage(str(ruta)))
         self._ajustar_imagen()
 
+    def _lado_vista(self):
+        """Lado mayor (en píxeles reales) que necesita la vista para verse nítida en este panel:
+        PhotoCraft la pinta de ese tamaño y no más grande (así tarda menos)."""
+        vp = self.area.viewport().size()
+        prop = 3508 / 2480   # las plantillas son A4 vertical
+        ancho = max(vp.width() - 8, 400) * (1.8 if self.zoom else 1)
+        alto = ancho * prop if self.zoom else min(max(vp.height() - 8, 400), ancho * prop)
+        return int(max(600, min(alto * self.devicePixelRatioF(), motor.SesionPhotoCraft.LADO_MAX)))
+
     def _ajustar_imagen(self):
         if not getattr(self, "pix", None) or self.pix.isNull() or not self.panel_vista.isVisible():
             return
@@ -481,6 +510,9 @@ class NuevoInterface(QWidget):
         img.setDevicePixelRatio(dpr)
         self.lienzo.setPixmap(img)
         self.lienzo.resize(img.deviceIndependentSize().toSize())
+        if (self.en_vivo.isChecked() and self.vista_ruta and self._imagen_actual() == self.vista_ruta
+                and max(self.pix.width(), self.pix.height()) + 48 < self._lado_vista()):
+            self.temporizador.start()   # la ventana creció o hay zoom: pedir la vista más nítida
 
     def _alternar_zoom(self):
         self.zoom = not self.zoom

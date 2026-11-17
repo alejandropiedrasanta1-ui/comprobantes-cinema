@@ -59,6 +59,14 @@ jobs:
           path: salida/*.dmg
           retention-days: 30
 
+      # La Mac de GitHub no tiene PhotoCraft: se usa uno simulado (herramientas/photocraft_simulado.py) que
+      # responde los mismos comandos. Prueba la vista en vivo de la app compilada escribiendo como un usuario.
+      - name: Probar la vista en vivo (PhotoCraft simulado)
+        timeout-minutes: 6
+        run: |
+          chmod +x herramientas/photocraft_simulado.py
+          "empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --prueba-vivo "$PWD/capturas/vivo" --cli "$PWD/herramientas/photocraft_simulado.py"
+
       - name: Probar el instalador como lo haría el usuario
         timeout-minutes: 8
         run: |
@@ -109,5 +117,5 @@ jobs:
         if: always()
         with:
           name: capturas-mac-${{ runner.arch }}
-          path: capturas/*.png
+          path: capturas/
           retention-days: 30

@@ -1,0 +1,743 @@
+{
+"width": 2480,
+"height": 3508,
+"layers": [
+{
+"id": 72,
+"name": "ICONO DE BODA",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+438,
+1223,
+193,
+300
+]
+},
+{
+"id": 70,
+"name": "ICONO DE XV AÑOS",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+381,
+1209,
+286,
+290
+]
+},
+{
+"id": 68,
+"name": "SALDO PENDIENTE: Q900",
+"kind": "Type",
+"visible": true,
+"bounds": [
+808,
+3217,
+1033,
+73
+],
+"text": {
+"text": "SALDO PENDIENTE: Q900",
+"font": "LEMON MILK",
+"sizePt": 18.0
+}
+},
+{
+"id": 67,
+"name": "Rectángulo 2",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+1716,
+1731,
+635,
+981
+]
+},
+{
+"id": 65,
+"name": "Forma 8 copia",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+1892,
+1738,
+4,
+948
+]
+},
+{
+"id": 64,
+"name": "Forma 8",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+569,
+1738,
+4,
+948
+]
+},
+{
+"id": 63,
+"name": "Grupo 1 copia",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+2045,
+2880,
+639,
+1318
+]
+},
+{
+"id": 61,
+"name": "Relleno de color 1",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+1886,
+2723,
+808,
+1658
+]
+},
+{
+"id": 59,
+"name": "Forma 7",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+457,
+2036,
+78,
+66
+]
+},
+{
+"id": 58,
+"name": "Forma 6",
+"kind": "Shape",
+"visible": false,
+"bounds": [
+456,
+1908,
+79,
+55
+]
+},
+{
+"id": 57,
+"name": "Forma 5",
+"kind": "Shape",
+"visible": false,
+"bounds": [
+456,
+2337,
+71,
+76
+]
+},
+{
+"id": 56,
+"name": "Forma 4",
+"kind": "Shape",
+"visible": false,
+"bounds": [
+457,
+2332,
+86,
+56
+]
+},
+{
+"id": 55,
+"name": "Forma 3",
+"kind": "Shape",
+"visible": false,
+"bounds": [
+441,
+2304,
+109,
+52
+]
+},
+{
+"id": 54,
+"name": "Camera",
+"kind": "Pixel",
+"visible": true,
+"bounds": [
+-776,
+2598,
+1108,
+1022
+]
+},
+{
+"id": 53,
+"name": "descarga (85)",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+1964,
+737,
+948,
+575
+]
+},
+{
+"id": 51,
+"name": "Image",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+-516,
+703,
+795,
+739
+]
+},
+{
+"id": 49,
+"name": "Forma 2",
+"kind": "Shape",
+"visible": false,
+"bounds": [
+453,
+1893,
+73,
+54
+]
+},
+{
+"id": 48,
+"name": "Forma 1",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+363,
+1771,
+168,
+58
+]
+},
+{
+"id": 47,
+"name": "Text",
+"kind": "Group",
+"visible": true,
+"bounds": null,
+"children": [
+{
+"id": 46,
+"name": "3657-3658",
+"kind": "Type",
+"visible": true,
+"bounds": [
+2073,
+513,
+326,
+48
+],
+"text": {
+"text": "3657-3658",
+"font": "LEMON MILK",
+"sizePt": 12.598780632019043
+}
+},
+{
+"id": 45,
+"name": "GUATEMALA",
+"kind": "Type",
+"visible": true,
+"bounds": [
+1476,
+520,
+344,
+41
+],
+"text": {
+"text": "GUATEMALA",
+"font": "LEMON MILK",
+"sizePt": 10.798955917358398
+}
+},
+{
+"id": 44,
+"name": "RESERVA CON: Q600",
+"kind": "Type",
+"visible": true,
+"bounds": [
+1529,
+2750,
+760,
+65
+],
+"text": {
+"text": "RESERVA CON: Q600",
+"font": "LEMON MILK",
+"sizePt": 15.99999713897705
+}
+},
+{
+"id": 43,
+"name": "BLANCO",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+1313,
+198,
+950,
+125
+]
+},
+{
+"id": 41,
+"name": "R",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+13,
+4,
+382,
+413
+]
+},
+{
+"id": 39,
+"name": "Descripción                                                    ",
+"kind": "Type",
+"visible": true,
+"bounds": [
+351,
+1634,
+1921,
+54
+],
+"text": {
+"text": "Descripción\t\t          \t\t\t\t\t\t\t\t                                       comprobante",
+"font": "LEMON MILK",
+"sizePt": 13.07921028137207
+}
+},
+{
+"id": 38,
+"name": "+502 0000 0000",
+"kind": "Type",
+"visible": true,
+"bounds": [
+1413,
+1081,
+530,
+51
+],
+"text": {
+"text": "+502 0000 0000",
+"font": "Myriad Pro",
+"sizePt": 16.192087173461914
+}
+},
+{
+"id": 37,
+"name": "cONTACTO :",
+"kind": "Type",
+"visible": true,
+"bounds": [
+1418,
+1000,
+503,
+62
+],
+"text": {
+"text": "cONTACTO :",
+"font": "LEMON MILK",
+"sizePt": 16.192087173461914
+}
+},
+{
+"id": 36,
+"name": "comprobante",
+"kind": "Type",
+"visible": true,
+"bounds": [
+93,
+603,
+914,
+58
+],
+"text": {
+"text": "comprobante",
+"font": "Ethnocentric Rg",
+"sizePt": 2.759791135787964
+}
+},
+{
+"id": 35,
+"name": "Nombre del festejado | Lugar",
+"kind": "Type",
+"visible": true,
+"bounds": [
+714,
+1442,
+749,
+59
+],
+"text": {
+"text": "Nombre del festejado | Lugar",
+"font": "Myriad Pro",
+"sizePt": 3.7331230640411377
+}
+},
+{
+"id": 34,
+"name": "BODA(ESENCIAL) - 1 DE ENERO",
+"kind": "Type",
+"visible": true,
+"bounds": [
+708,
+1350,
+1356,
+82
+],
+"text": {
+"text": "BODA(ESENCIAL) - 1 DE ENERO",
+"font": "Myriad Pro",
+"sizePt": 6.399641036987305
+}
+},
+{
+"id": 33,
+"name": "TEMA",
+"kind": "Type",
+"visible": true,
+"bounds": [
+711,
+1264,
+141,
+37
+],
+"text": {
+"text": "TEMA",
+"font": "LEMON MILK",
+"sizePt": 9.895163536071777
+}
+},
+{
+"id": 32,
+"name": "FECHA: 23/10/2026 ",
+"kind": "Type",
+"visible": true,
+"bounds": [
+350,
+998,
+724,
+69
+],
+"text": {
+"text": "FECHA: 1/01/2026",
+"font": "LEMON MILK",
+"sizePt": 11.64134407043457
+}
+}
+]
+},
+{
+"id": 31,
+"name": "pago exitoso",
+"kind": "Type",
+"visible": true,
+"bounds": [
+698,
+2987,
+1230,
+125
+],
+"text": {
+"text": "pago exitoso",
+"font": "LEMON MILK",
+"sizePt": 16.03554916381836
+}
+},
+{
+"id": 30,
+"name": "Rectángulo 1",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+348,
+2875,
+1950,
+309
+]
+},
+{
+"id": 29,
+"name": "Social Media",
+"kind": "Group",
+"visible": true,
+"bounds": null,
+"children": [
+{
+"id": 28,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+1337,
+496,
+97,
+97
+]
+},
+{
+"id": 27,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+1949,
+500,
+88,
+89
+]
+}
+]
+},
+{
+"id": 26,
+"name": "Design",
+"kind": "Group",
+"visible": true,
+"bounds": null,
+"children": [
+{
+"id": 25,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+477,
+3411,
+1672,
+24
+]
+},
+{
+"id": 24,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+-194,
+3276,
+729,
+515
+]
+},
+{
+"id": 23,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+2008,
+756,
+185,
+160
+]
+},
+{
+"id": 22,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+344,
+2733,
+2010,
+5
+]
+},
+{
+"id": 21,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+2155,
+2939,
+74,
+14
+]
+},
+{
+"id": 20,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+344,
+1713,
+2014,
+5
+]
+},
+{
+"id": 19,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+64,
+797,
+231,
+78
+]
+},
+{
+"id": 18,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+1874,
+380,
+229,
+80
+]
+},
+{
+"id": 17,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+-133,
+-130,
+1035,
+668
+]
+},
+{
+"id": 16,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+1239,
+419,
+1311,
+250
+]
+},
+{
+"id": 15,
+"name": "Shape",
+"kind": "Shape",
+"visible": true,
+"bounds": [
+0,
+-1,
+2330,
+838
+]
+}
+]
+},
+{
+"id": 14,
+"name": "Background",
+"kind": "Group",
+"visible": true,
+"bounds": null,
+"children": [
+{
+"id": 13,
+"name": "ICONO - galeria",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+434,
+2198,
+119,
+42
+]
+},
+{
+"id": 11,
+"name": "LISTA DEL PAQUETE",
+"kind": "Type",
+"visible": true,
+"bounds": [
+620,
+1729,
+832,
+543
+],
+"text": {
+"text": "\nFotos ilimitadas\n(Sin límite de horas)\n\nCobertura en\n(Ceremonia - fiesta)\n\nVideo con fotos\n(Fotos del evento)\n\nGalería online\n(Link con las fotos)",
+"font": "LEMON MILK",
+"sizePt": 8.000000953674316
+}
+},
+{
+"id": 10,
+"name": "108980",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+435,
+2165,
+100,
+95
+]
+},
+{
+"id": 8,
+"name": "8bb2736703fabcee9d65d5c3e304704a",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+436,
+1890,
+114,
+115
+]
+},
+{
+"id": 6,
+"name": "288",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+442,
+2443,
+89,
+89
+]
+},
+{
+"id": 4,
+"name": "PATTERN REVIEW copy",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+0,
+0,
+2480,
+3508
+]
+},
+{
+"id": 2,
+"name": "Background",
+"kind": "Fill",
+"visible": true,
+"bounds": null
+}
+]
+}
+]
+}

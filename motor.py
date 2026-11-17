@@ -2,6 +2,7 @@
 cambia los textos, coloca la captura del pago y exporta un JPG.
 Las plantillas originales nunca se modifican."""
 import atexit
+import base64
 import glob
 import json
 import os
@@ -190,8 +191,17 @@ LIMITE_DERECHO = {"tema": 2340, "nombre_lugar": 2340, "contacto": 1950}
 _cache_fuentes = None
 
 
-def _fuentes_instaladas(cfg):
+def olvidar_fuentes():
+    """Se instalaron fuentes: volver a preguntarle a PhotoCraft (y reabrir el de la vista en vivo)."""
     global _cache_fuentes
+    _cache_fuentes = None
+    _sesion.reiniciar = True
+
+
+def _fuentes_instaladas(cfg, sesion=None):
+    global _cache_fuentes
+    if sesion:   # el PhotoCraft de la vista en vivo ya está abierto: no hace falta otro
+        return sesion.fuentes_instaladas()
     if _cache_fuentes is None:
         salida = _cli(cfg, "run", "--new", '{"width":8,"height":8}', "--cmd", "type.fonts")
         familias = set()
@@ -202,11 +212,11 @@ def _fuentes_instaladas(cfg):
     return _cache_fuentes
 
 
-def _estilos_sustitutos(cfg, capas, ids):
+def _estilos_sustitutos(cfg, capas, ids, sesion=None):
     """Para cada capa editada cuya fuente no está instalada (p. ej. Myriad Pro), devuelve el
     estilo de la fuente sustituta calibrada para que mida y se vea igual que el original."""
     sustitutos = cfg.get("sustitutos_fuente") or {}
-    instaladas = _fuentes_instaladas(cfg) if sustitutos else set()
+    instaladas = _fuentes_instaladas(cfg, sesion) if sustitutos else set()
     estilos = {}
     for l in capas:
         if l["id"] not in ids:
@@ -308,13 +318,29 @@ def _nombre_archivo(carpeta, base):
 
 CONCEPTOS = {"RESERVA CON": "RESERVA", "ABONO": "ABONO", "PAGO FINAL": "PAGO FINAL"}
 
+_ultima_captura = [None, None]   # [clave, archivo] de la captura ya preparada para la vista en vivo
 
-def generar(datos, cfg=None, destino=None, calidad=None, sesion=None):
+
+def _captura_vista(ruta, ancho_marco, alto_marco):
+    """Como _preparar_captura, pero la reutiliza mientras sea la misma imagen (la vista se repite
+    en cada tecla). Devuelve (clave, archivo)."""
+    st = os.stat(ruta)
+    clave = (str(ruta), st.st_mtime, st.st_size, ancho_marco, alto_marco)
+    if _ultima_captura[0] != clave:
+        archivo = Path(tempfile.gettempdir()) / f"cinema_vista_captura_{os.getpid()}.png"
+        _preparar_captura(ruta, ancho_marco, alto_marco, archivo)
+        _ultima_captura[:] = [clave, archivo]
+    return _ultima_captura[0], _ultima_captura[1]
+
+
+def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None):
     """datos: evento, paquete, festejado, lugar, fecha_evento (date), fecha_comprobante (date),
     contacto, total, monto (o reserva), captura (ruta de imagen).
     Opcionales: concepto ("RESERVA CON", "ABONO", "PAGO FINAL") y saldo (lo que falta después
     de este pago; si no se da, total - monto). Devuelve la ruta del JPG.
-    sesion: SesionPhotoCraft ya abierta (vista en vivo); sin ella se usa «photocraft-cli run»."""
+    sesion: SesionPhotoCraft ya abierta (vista en vivo); sin ella se usa «photocraft-cli run».
+    lado: con sesión, la vista se pinta en memoria con ese lado mayor (px, hasta 2048) y se guarda
+    como PNG junto a destino, en vez de exportar el JPG completo."""
     cfg = cfg or cargar_config()
     paquete = cfg["paquetes"][datos["paquete"]]
     plantilla = ruta_plantilla(paquete)
@@ -340,19 +366,30 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None):
     for capa in loc["saldo"]:
         textos[capa] = "PAGO COMPLETADO" if saldo <= 0 else f"SALDO PENDIENTE: {quetzales(saldo)}"
 
-    estilos = _estilos_sustitutos(cfg, capas, textos)
     if sesion:
         sesion.abrir(plantilla)
+    estilos = _estilos_sustitutos(cfg, capas, textos, sesion)
+
+    x, y, w, h = loc["captura"]["bounds"]
+    tmp = clave_captura = None
+    if datos.get("captura"):  # en la vista previa puede faltar: queda el recuadro de ejemplo
+        if sesion:   # preparada una sola vez mientras sea la misma imagen
+            clave_captura, tmp = _captura_vista(datos["captura"], w, h)
+        else:
+            tmp = Path(tempfile.gettempdir()) / f"cinema_captura_{os.getpid()}_{id(datos)}.png"
+            _preparar_captura(datos["captura"], w, h, tmp)
+    cmds_captura = []
+    if tmp:
+        cid = loc["captura"]["id"]
+        cmds_captura = [("layer.smartObjects.replaceContents", {"layer": cid, "path": str(tmp)}),
+                        ("edit.transform", {"layer": cid, "quad": [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]})]
+    if sesion:   # la captura queda en la instantánea base: no se vuelve a colocar en cada tecla
+        sesion.poner_captura(clave_captura, cmds_captura)
+
     ajustes, movimientos = _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos,
                                             sesion.medir if sesion else None)
     for capa, ajuste in ajustes.items():
         estilos.setdefault(capa, {}).update(ajuste)
-
-    x, y, w, h = loc["captura"]["bounds"]
-    tmp = None
-    if datos.get("captura"):  # en la vista previa puede faltar: queda el recuadro de ejemplo
-        tmp = Path(tempfile.gettempdir()) / f"cinema_captura_{os.getpid()}_{id(datos)}.png"
-        _preparar_captura(datos["captura"], w, h, tmp)
 
     cmds = []
 
@@ -370,10 +407,6 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None):
         cmd("layer.setProps", {"layer": loc["icono_boda"], "visible": not es_xv})
     if loc["icono_xv"]:
         cmd("layer.setProps", {"layer": loc["icono_xv"], "visible": es_xv})
-    if tmp:
-        cid = loc["captura"]["id"]
-        cmd("layer.smartObjects.replaceContents", {"layer": cid, "path": str(tmp)})
-        cmd("edit.transform", {"layer": cid, "quad": [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]})
 
     if destino:  # vista previa: archivo temporal indicado, se sobrescribe
         destino = Path(destino)
@@ -385,17 +418,21 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None):
             salida, f"COMPROBANTE - {evento} {datos['paquete']} - {datos['festejado'].strip()} - "
                     f"{fe.day:02d}-{fe.month:02d}-{fe.year} - {CONCEPTOS.get(concepto, concepto)}")
     calidad = calidad or cfg.get("calidad_jpg", 92)
-    try:
-        if sesion:
-            sesion.aplicar(cmds)
-            sesion.guardar(destino, calidad)
+    if sesion:
+        sesion.aplicar(cmds)
+        if lado:   # vista en vivo: imagen en memoria del tamaño de la pantalla (sin exportar el JPG completo)
+            destino = destino.with_suffix(".png")
+            destino.write_bytes(sesion.pintar(lado))
         else:
+            sesion.guardar(destino, calidad)
+    else:
+        try:
             # Sin metadatos: el XMP de los PSD puede traer textos viejos de las capas (datos de otros clientes)
-            _cli(cfg, "run", plantilla, *_argumentos(cmds),
+            _cli(cfg, "run", plantilla, *_argumentos(cmds + cmds_captura),
                  "--out", str(destino), "--quality", str(calidad), "--metadata", "none")
-    finally:
-        if tmp:
-            tmp.unlink(missing_ok=True)
+        finally:
+            if tmp:
+                tmp.unlink(missing_ok=True)
     if not destino.exists():
         raise RuntimeError("PhotoCraft terminó pero no se creó el archivo.")
     return destino
@@ -403,23 +440,32 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None):
 
 # ================= Vista en vivo rápida =================
 class SesionPhotoCraft:
-    """PhotoCraft abierto en segundo plano («photocraft-cli serve») para la vista en vivo: la plantilla
-    se abre una sola vez y cada cambio solo edita los textos y exporta (≈0,4 s en vez de 2-3 s).
-    Antes de cada vista se vuelve a la instantánea «base» (la plantilla tal como se abrió)."""
-    ESPERA_MAX = 40  # s por pedido; si PhotoCraft se cuelga se cierra y se usa el método normal
+    """PhotoCraft abierto en segundo plano («photocraft-cli serve») para la vista en vivo.
+    - La plantilla del paquete se abre una sola vez y queda abierta con una instantánea «base» (con la
+      captura del pago ya puesta); antes de cada vista se vuelve a ella, se cambian los textos y se
+      pinta en memoria del tamaño de la pantalla.
+    - Una plantilla por proceso: PhotoCraft numera las capas por proceso (una segunda plantilla, o la
+      misma reabierta, ya no tiene los números que da «info»), así que al cambiar de paquete se abre
+      PhotoCraft de nuevo (≈1 s). Tener varias abiertas a la vez gastaría ~1 GB de RAM por plantilla.
+    Una vista tarda ≈0,15-0,2 s (antes 2-3 s: el PSD de ~90 MB se abría dos veces en cada cambio)."""
+    ESPERA_MAX = 40   # s por pedido; si PhotoCraft se cuelga se cierra y se usa el método normal
+    LADO_MAX = 2048   # lo más grande que pinta «doc.render»
 
     def __init__(self):
         self.proc = None
         self.clave = None        # (exe, carpetas de lectura, carpeta de escritura)
-        self.plantilla = None    # (ruta, fecha de modificación) del documento abierto
-        self.base = None         # id de la instantánea «base»
+        self.doc = None          # {plantilla, clave, base0, base, captura} del documento abierto
+        self.reiniciar = False   # se instalaron fuentes: hay que abrir PhotoCraft de nuevo
         self.n = 0
+        self.candado = threading.Lock()
         atexit.register(self.cerrar)
 
+    # ---- proceso ----
     def _iniciar(self, exe, lectura, escritura):
         clave = (exe, frozenset(lectura), escritura)
-        if self.proc and self.proc.poll() is None and self.clave == clave:
-            return
+        if (self.proc and self.proc.poll() is None and self.clave[0] == exe and clave[1] <= self.clave[1]
+                and self.clave[2] == escritura):
+            return   # ya abierto, con los permisos necesarios
         self.cerrar()
         if not os.path.isfile(exe):
             raise RuntimeError("No se encontró PhotoCraft (photocraft-cli).\n"
@@ -433,15 +479,18 @@ class SesionPhotoCraft:
         self.clave = clave
 
     def _pedir(self, metodo, params):
+        proc = self.proc
+        if not proc:
+            raise RuntimeError("PhotoCraft (vista en vivo) no está abierto.")
         self.n += 1
         reloj = threading.Timer(self.ESPERA_MAX, self.cerrar)  # al cerrarse, readline() devuelve vacío
         reloj.start()
         try:
-            self.proc.stdin.write(json.dumps({"id": self.n, "method": metodo, "params": params},
-                                             ensure_ascii=False) + "\n")
-            self.proc.stdin.flush()
+            proc.stdin.write(json.dumps({"id": self.n, "method": metodo, "params": params},
+                                        ensure_ascii=False) + "\n")
+            proc.stdin.flush()
             while True:
-                linea = self.proc.stdout.readline()
+                linea = proc.stdout.readline()
                 if not linea:
                     raise RuntimeError("PhotoCraft (vista en vivo) se cerró.")
                 try:
@@ -450,7 +499,7 @@ class SesionPhotoCraft:
                     continue
                 if r.get("id") == self.n:
                     break
-        except (OSError, ValueError, AttributeError) as e:
+        except (OSError, ValueError) as e:
             raise RuntimeError(f"PhotoCraft (vista en vivo) no responde: {e}")
         finally:
             reloj.cancel()
@@ -459,32 +508,61 @@ class SesionPhotoCraft:
         return r.get("result") or {}
 
     def _ejecutar(self, comando, params):
+        if comando == "layer.smartObjects.replaceContents":
+            # en «serve» los comandos con rutas están desactivados: se usa el método del documento
+            return self._pedir("doc.replaceSmartObject", {**params, "path": str(Path(params["path"]).resolve())})
         return self._pedir("engine.execute", {"command": comando, "params": params})
 
-    def preparar(self, cfg, destino):
+    def preparar(self, cfg):
+        if self.reiniciar:
+            self.reiniciar = False
+            self.cerrar()
         tmp = str(Path(tempfile.gettempdir()).resolve())
         lectura = {tmp, str(Path(rutas.recurso("PLANTILLAS")).resolve())}
-        self._iniciar(cfg.get("photocraft_cli") or "", lectura, str(Path(destino).parent.resolve()))
+        self._iniciar(cfg.get("photocraft_cli") or "", lectura, tmp)
 
+    def fuentes_instaladas(self):
+        global _cache_fuentes
+        if _cache_fuentes is None:   # se comparte con el método normal (mismas fuentes del sistema)
+            _cache_fuentes = set(self._ejecutar("type.fonts", {}).get("families", []))
+        return _cache_fuentes
+
+    # ---- documento ----
     def abrir(self, plantilla):
-        clave = (plantilla, os.path.getmtime(plantilla))
-        if self.plantilla == clave:
+        st = os.stat(plantilla)
+        clave = (st.st_mtime, st.st_size)
+        if self.doc and self.doc["plantilla"] == plantilla and self.doc["clave"] == clave:
             return
-        carpeta = str(Path(plantilla).parent.resolve())
-        if carpeta not in self.clave[1]:  # plantilla fuera de PLANTILLAS: hay que reiniciar con permiso
-            self._iniciar(self.clave[0], self.clave[1] | {carpeta}, self.clave[2])
-        if self.plantilla:
+        exe, lectura, escritura = self.clave
+        lectura = lectura | {str(Path(plantilla).parent.resolve())}
+        if self.doc:   # otro paquete (o el PSD cambió): PhotoCraft nuevo para que las capas coincidan
+            self.cerrar()
+        self._iniciar(exe, lectura, escritura)
+        self._pedir("doc.open", {"path": str(Path(plantilla).resolve())})
+        base = self._ejecutar("history.newSnapshot", {"name": "base"})["snapshot"]
+        self.doc = dict(plantilla=plantilla, clave=clave, base0=base, base=base, captura=None)
+
+    def poner_captura(self, clave, cmds):
+        """Deja la captura del pago (o el recuadro de ejemplo) en la instantánea base del documento."""
+        d = self.doc
+        if d["captura"] == clave:
+            return
+        self._ejecutar("history.selectSnapshot", {"snapshot": d["base0"]})
+        if d["base"] != d["base0"]:
             try:
-                self._pedir("doc.close", {})
+                self._ejecutar("history.deleteSnapshot", {"snapshot": d["base"]})
             except RuntimeError:
                 pass
-        self.plantilla = None
-        self._pedir("doc.open", {"path": str(Path(plantilla).resolve())})
-        self.base = self._ejecutar("history.newSnapshot", {"name": "base"})["snapshot"]
-        self.plantilla = clave
+            d["base"] = d["base0"]
+        d["captura"] = None
+        if cmds:
+            for nombre, params in cmds:
+                self._ejecutar(nombre, params)
+            d["base"] = self._ejecutar("history.newSnapshot", {"name": "captura"})["snapshot"]
+        d["captura"] = clave
 
     def _a_base(self):
-        self._ejecutar("history.selectSnapshot", {"snapshot": self.base})
+        self._ejecutar("history.selectSnapshot", {"snapshot": self.doc["base"]})
 
     def medir(self, cmds):
         self._a_base()
@@ -493,18 +571,19 @@ class SesionPhotoCraft:
     def aplicar(self, cmds):
         self._a_base()
         for nombre, params in cmds:
-            if nombre == "layer.smartObjects.replaceContents":
-                # en «serve» los comandos con rutas están desactivados: se usa el método del documento
-                self._pedir("doc.replaceSmartObject", {**params, "path": str(Path(params["path"]).resolve())})
-            else:
-                self._ejecutar(nombre, params)
+            self._ejecutar(nombre, params)
+
+    def pintar(self, lado):
+        """La imagen del documento como PNG (bytes), con su lado mayor = lado px (máx. 2048)."""
+        lado = int(max(256, min(lado, self.LADO_MAX)))
+        return base64.b64decode(self._pedir("doc.render", {"maxSide": lado})["base64"])
 
     def guardar(self, destino, calidad):
         self._pedir("doc.save", {"path": str(Path(destino).resolve()), "quality": int(calidad),
                                  "metadata": "none"})
 
     def cerrar(self):
-        proc, self.proc, self.plantilla = self.proc, None, None
+        proc, self.proc, self.doc = self.proc, None, None
         if proc and proc.poll() is None:
             try:
                 proc.stdin.close()
@@ -518,21 +597,28 @@ class SesionPhotoCraft:
 
 _sesion = SesionPhotoCraft()
 _fallos_sesion = 0
+_exe_sesion = None   # los fallos cuentan por PhotoCraft: si se elige otro, se vuelve a intentar
 
 
-def generar_vista(datos, cfg, destino, calidad=80):
-    """Vista previa en vivo: usa PhotoCraft ya abierto; si eso falla (o la versión de PhotoCraft no
-    tiene «serve»), hace la vista con el método normal. Tras 2 fallos seguidos ya no lo intenta."""
-    global _fallos_sesion
+def generar_vista(datos, cfg, destino, calidad=80, lado=None):
+    """Vista previa en vivo: usa PhotoCraft ya abierto y pinta la imagen del tamaño de la pantalla
+    (lado px). Si eso falla (o la versión de PhotoCraft no tiene «serve»), la hace con el método
+    normal. Tras 2 fallos seguidos ya no lo intenta. Devuelve la ruta de la imagen."""
+    global _fallos_sesion, _exe_sesion
+    destino = Path(destino)
+    exe = cfg.get("photocraft_cli") or ""
+    if not os.path.isfile(exe):   # sin PhotoCraft: el método normal da el aviso de siempre
+        return generar(datos, cfg, destino.with_suffix(".jpg"), calidad)
+    if exe != _exe_sesion:
+        _exe_sesion, _fallos_sesion = exe, 0
     if _fallos_sesion < 2:
         try:
-            _sesion.preparar(cfg, destino)
-            ruta = generar(datos, cfg, destino, calidad, sesion=_sesion)
+            with _sesion.candado:
+                _sesion.preparar(cfg)
+                ruta = generar(datos, cfg, destino, calidad, sesion=_sesion, lado=lado or _sesion.LADO_MAX)
             _fallos_sesion = 0
             return ruta
         except Exception:
             _fallos_sesion += 1
             _sesion.cerrar()
-            if not os.path.isfile(cfg.get("photocraft_cli") or ""):
-                raise
-    return generar(datos, cfg, destino, calidad)
+    return generar(datos, cfg, destino.with_suffix(".jpg"), calidad)

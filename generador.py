@@ -3,6 +3,9 @@
   python generador.py                       abre el programa
   python generador.py --autoprueba INFORME  genera un comprobante de cada paquete sin ventana
                                             (sirve para verificar una instalación)
+  python generador.py --prueba-vivo CARPETA [--cli PHOTOCRAFT]
+                                            prueba la vista en vivo escribiendo como un usuario
+                                            y mide cuánto tarda cada cambio en verse
 """
 import sys
 import traceback
@@ -128,9 +131,172 @@ def _capturas(carpeta):
     return 0
 
 
+def _prueba_vivo(carpeta, cli=None):
+    """Prueba la vista en vivo como un usuario: escribe letra por letra, pone la captura, cambia de
+    paquete, usa el zoom y agranda la ventana. Mide cuánto tarda en verse cada cambio, guarda
+    capturas de pantalla y un informe (vista_en_vivo.txt). cli: otro photocraft-cli (p. ej. el
+    simulado de herramientas/ en la Mac de GitHub, que no tiene PhotoCraft). Devuelve 0 si todo
+    se vio a tiempo y sin errores."""
+    import statistics
+    import tempfile
+    import time
+    from PySide6.QtCore import QEventLoop, QTimer
+    from PySide6.QtWidgets import QApplication
+    import app
+
+    carpeta = Path(carpeta)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    rutas.BASE_DATOS = Path(tempfile.mkdtemp()) / "prueba.db"
+    qa = QApplication(sys.argv)
+    app.configurar_letra()
+    cfg = motor.cargar_config()
+    cfg["vista_en_vivo"] = True
+    if cli:
+        cfg["photocraft_cli"] = str(Path(cli).resolve())
+    v = app.Ventana(cfg, revisar=False)
+    if hasattr(v, "setMicaEffectEnabled"):
+        v.setMicaEffectEnabled(False)
+    v.resize(1180, 760)
+    v.move(40, 40)
+    v.show()
+    n = v.nuevo
+    t0 = time.perf_counter()
+    reloj = lambda: time.perf_counter() - t0
+    lineas, errores = [], []
+
+    def anotar(texto):
+        lineas.append(texto)
+        print(texto, flush=True)
+
+    def esperar(ms):
+        lazo = QEventLoop()
+        QTimer.singleShot(int(ms), lazo.quit)
+        lazo.exec()
+
+    # Cada vista que empieza se anota con los datos que lleva; al verse, cuánto tardó.
+    pedidas, vistas = [], []
+    orig_render, orig_lista, orig_fallo = n._render_vista, n._vista_lista, n._vista_fallo
+
+    def render():
+        antes = n.n_vista
+        orig_render()
+        if n.n_vista != antes:
+            pedidas.append((reloj(), n.festejado.text(), n.lugar.text(), n.paquete, n.zona.ruta, n.zoom))
+
+    def lista(ruta):
+        inicio, *datos = pedidas.pop(0)
+        vistas.append((reloj(), reloj() - inicio, *datos))
+        orig_lista(ruta)
+
+    def fallo(msg):
+        pedidas.pop(0)
+        errores.append(msg)
+        anotar(f"  ERROR en la vista: {msg.splitlines()[0]}")
+        orig_fallo(msg)
+
+    n._render_vista, n._vista_lista, n._vista_fallo = render, lista, fallo
+    n.temporizador.timeout.disconnect()
+    n.temporizador.timeout.connect(n._render_vista)
+    n.tope_vista.timeout.disconnect()
+    n.tope_vista.timeout.connect(n._render_vista)
+
+    def hasta_ver(condicion, limite=60):
+        """Espera a que se vea una vista que cumpla la condición; devuelve el momento o None."""
+        fin = time.perf_counter() + limite
+        while time.perf_counter() < fin:
+            for vista in vistas:
+                if condicion(vista):
+                    return vista[0]
+            esperar(15)
+        return None
+
+    def foto(nombre):
+        v.grab().save(str(carpeta / f"vivo_{nombre}.png"))
+
+    def escribir(campo, texto, pausa_ms):
+        campo.setFocus()
+        campo.clear()
+        esperar(400)
+        del vistas[:]
+        inicio = reloj()
+        for letra in texto:
+            campo.end(False)
+            campo.insert(letra)
+            ultima = reloj()   # la hora de la tecla, no la de después de la pausa
+            esperar(pausa_ms)
+        visto = hasta_ver(lambda vi: vi[2:6] == (n.festejado.text(), n.lugar.text(), n.paquete, n.zona.ruta))
+        durante = sum(1 for vi in vistas if vi[0] <= ultima)
+        tiempos = [vi[1] for vi in vistas]
+        if visto is None:
+            errores.append(f"no se vio «{texto}»")
+            anotar(f"  NO SE VIO el texto final «{texto}»")
+        else:
+            anotar(f"  {len(texto)} letras en {ultima - inicio:.1f} s · vistas mientras escribía: {durante} · "
+                   f"texto final visible {1000 * (visto - ultima):.0f} ms después de la última tecla · "
+                   f"cada vista: mediana {1000 * statistics.median(tiempos):.0f} ms, máx {1000 * max(tiempos):.0f} ms")
+
+    def paso(nombre, accion, condicion):
+        del vistas[:]
+        inicio = reloj()
+        accion()
+        visto = hasta_ver(condicion)
+        if visto is None:
+            errores.append(f"{nombre}: no se vio")
+            anotar(f"{nombre}: NO SE VIO")
+        else:
+            anotar(f"{nombre}: visible en {1000 * (visto - inicio):.0f} ms")
+
+    anotar(f"Vista en vivo · {sys.platform} · PhotoCraft: {cfg.get('photocraft_cli')}")
+    visto = hasta_ver(lambda vi: True, 120)
+    anotar(f"Primera vista al abrir: {visto:.1f} s" if visto else "Primera vista al abrir: NO SE VIO")
+    if not visto:
+        errores.append("primera vista")
+    foto("0_inicio")
+    anotar("Nombre, escribiendo normal (8 letras/s):")
+    escribir(n.festejado, "Marta Alejandra y José Pérez", 125)
+    anotar("Lugar, escribiendo rápido (20 letras/s):")
+    escribir(n.lugar, "Hotel Casa Santo Domingo, Antigua", 50)
+    foto("1_textos")
+    imagen = Path(tempfile.gettempdir()) / "prueba_vivo_captura.png"
+    from PIL import Image, ImageDraw
+    im = Image.new("RGB", (900, 1600), (40, 120, 200))
+    ImageDraw.Draw(im).text((60, 700), "CAPTURA DE PRUEBA", fill="white")
+    im.save(imagen)
+    paso("Poner la captura del pago", lambda: n.zona.usar(str(imagen)), lambda vi: vi[5] == str(imagen))
+    foto("2_captura")
+    otro = [p for p in cfg["paquetes"] if p != n.paquete][-1]
+    paso(f"Cambiar al paquete {otro}", lambda: n.elegir_paquete(otro), lambda vi: vi[4] == otro)
+    anotar("Nombre en el paquete nuevo:")
+    escribir(n.festejado, "Daniel y Sofía", 125)
+    foto("3_paquete")
+    paso("Zoom (vista más grande y nítida)", n._alternar_zoom, lambda vi: vi[6] is True)
+    foto("4_zoom")
+    n._alternar_zoom()
+    esperar(800)
+    v.resize(1380, 880)
+    esperar(300)
+    if n.pix and max(n.pix.width(), n.pix.height()) + 48 < n._lado_vista():
+        paso("Agrandar la ventana (vista más nítida)", lambda: None, lambda vi: True)
+    esperar(500)
+    foto("5_ventana_grande")
+    if n.vista_ruta:
+        import shutil
+        shutil.copy(n.vista_ruta, carpeta / f"vivo_ultima_vista{Path(n.vista_ruta).suffix}")
+    anotar(f"Fallos de la vía rápida: {motor._fallos_sesion} · errores: {len(errores)}")
+    anotar("RESULTADO: " + ("OK" if not errores and motor._fallos_sesion == 0 else "FALLÓ · " + " · ".join(errores)))
+    (carpeta / "vista_en_vivo.txt").write_text("\n".join(lineas), encoding="utf-8")
+    while n.vista_trabajo and n.vista_trabajo.isRunning():
+        esperar(50)
+    v.close()
+    motor._sesion.cerrar()
+    return 0 if not errores and motor._fallos_sesion == 0 else 1
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "--verificar":
         sys.exit(_verificar())
+    if len(sys.argv) in (3, 5) and sys.argv[1] == "--prueba-vivo":
+        sys.exit(_prueba_vivo(sys.argv[2], sys.argv[4] if len(sys.argv) == 5 and sys.argv[3] == "--cli" else None))
     if len(sys.argv) == 3 and sys.argv[1] == "--capturas":
         sys.exit(_capturas(sys.argv[2]))
     if len(sys.argv) == 3 and sys.argv[1] == "--autoprueba":

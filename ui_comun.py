@@ -108,14 +108,15 @@ class Trabajo(QThread):
     listo = Signal(str)
     fallo = Signal(str)
 
-    def __init__(self, datos, cfg, destino=None, calidad=None, vista=False):
+    def __init__(self, datos, cfg, destino=None, calidad=None, vista=False, lado=None):
         super().__init__()
         self.datos, self.cfg, self.destino, self.calidad, self.vista = datos, cfg, destino, calidad, vista
+        self.lado = lado
 
     def run(self):
         try:
             if self.vista:  # vista en vivo: PhotoCraft queda abierto entre un cambio y otro
-                ruta = motor.generar_vista(self.datos, self.cfg, self.destino, self.calidad or 80)
+                ruta = motor.generar_vista(self.datos, self.cfg, self.destino, self.calidad or 80, self.lado)
             else:
                 ruta = motor.generar(self.datos, self.cfg, self.destino, self.calidad)
             self.listo.emit(str(ruta))
@@ -138,7 +139,7 @@ class Revision(QThread):
             if not faltan_f:
                 return
             hechos = fuentes.instalar(faltan_f)
-            motor._cache_fuentes = None
+            motor.olvidar_fuentes()
             siguen = fuentes.faltantes(motor._fuentes_instaladas(self.cfg))
             if siguen:
                 self.listo.emit("Faltan las fuentes del diseño (" + ", ".join(siguen) + "). "
