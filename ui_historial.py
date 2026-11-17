@@ -1,17 +1,18 @@
 """Pantalla «Clientes»: historial, saldos pendientes y registro de abonos."""
 import calendar
+import math
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
+from PySide6.QtCore import QDate, QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QBoxLayout, QGraphicsOpacityEffect, QHBoxLayout, QHeaderView,
                                QLabel, QListWidgetItem, QStyle, QStyledItemDelegate, QTableWidgetItem, QVBoxLayout,
                                QWidget)
 from qfluentwidgets import (CalendarPicker, CaptionLabel, FlowLayout, FluentIcon as FIF,
                             IndeterminateProgressRing, ListItemDelegate, ListWidget, MessageBox, PrimaryPushButton, PushButton,
                             SearchLineEdit, SmoothScrollArea, StrongBodyLabel, SubtitleLabel,
-                            TableItemDelegate, TableWidget, TitleLabel, TransparentPushButton)
+                            TableItemDelegate, TableWidget, TitleLabel, TransparentPushButton, isDarkTheme)
 
 import estilo
 import motor
@@ -224,38 +225,81 @@ class ChipFiltro(QWidget):
         p.end()
 
 
-class _Ilustracion(estilo.Animacion):
-    """«Aún no hay clientes»: recibos flotando (GIF animado de Higgsfield, oscuro o claro según el tema).
-    Se anima mientras está a la vista."""
-
-    def __init__(self, ancho, parent=None):
-        super().__init__("vacio", QSize(ancho, int(ancho * 288 / 384)), parent=parent)
-
-    def showEvent(self, e):
-        super().showEvent(e)
-        self.iniciar()
-
-    def hideEvent(self, e):
-        super().hideEvent(e)
-        self.detener()
-
-
-class _MarcoIlustracion(QWidget):
-    """Tarjeta redondeada del mismo color que el fondo del GIF: el recuadro del GIF no se nota."""
+class _Ilustracion(QWidget):
+    """«Aún no hay clientes»: la ilustración de Higgsfield (PNG con transparencia, versión oscura o clara)
+    flotando suavemente, con su sombra que respira y tres brillos que titilan. Todo nítido: se dibuja en código."""
 
     def __init__(self, ancho, parent=None):
         super().__init__(parent)
-        self.ilus = _Ilustracion(ancho)
-        h = QHBoxLayout(self)
-        h.setContentsMargins(16, 12, 16, 12)
-        h.addWidget(self.ilus)
+        self.ancho = ancho
+        self._pm = {}
+        self._fase = 0.0
+        alto = int(ancho * 720 / 680)
+        self.setFixedSize(ancho + 60, alto + 40)
+        self._reloj = QVariantAnimation(self)
+        self._reloj.setStartValue(0.0)
+        self._reloj.setEndValue(1.0)
+        self._reloj.setDuration(4200)
+        self._reloj.setLoopCount(-1)
+        self._reloj.valueChanged.connect(self._tic)
+
+    def _tic(self, v):
+        self._fase = v
+        self.update()
+
+    def _pixmap(self):
+        clave = ("oscuro" if isDarkTheme() else "claro", self.devicePixelRatioF())
+        if clave not in self._pm:
+            archivo = "recursos/ilustracion_vacio.png" if clave[0] == "oscuro" else "recursos/ilustracion_vacio_claro.png"
+            pm = QPixmap(str(rutas.recurso(archivo)))
+            if pm.isNull():
+                pm = QPixmap(str(rutas.recurso("recursos/ilustracion_vacio.png")))
+            pm = pm.scaledToWidth(int(self.ancho * clave[1]), Qt.SmoothTransformation)
+            pm.setDevicePixelRatio(clave[1])
+            self._pm[clave] = pm
+        return self._pm[clave]
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        if estilo.ANIMAR:
+            self._reloj.start()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self._reloj.stop()
+
+    @staticmethod
+    def _estrella(p, centro, r, color):
+        camino = QPainterPath(QPointF(centro.x(), centro.y() - r))
+        for dx, dy in ((0.22, -0.22), (1, 0), (0.22, 0.22), (0, 1), (-0.22, 0.22), (-1, 0), (-0.22, -0.22), (0, -1)):
+            camino.lineTo(centro.x() + dx * r, centro.y() + dy * r)
+        p.setPen(Qt.NoPen)
+        p.setBrush(color)
+        p.drawPath(camino)
 
     def paintEvent(self, e):
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.setPen(QPen(estilo.c("borde"), 1))
-        p.setBrush(self.ilus.fondo)
-        p.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 22, 22)
+        p.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
+        pm = self._pixmap()
+        tam = pm.deviceIndependentSize()
+        ola = math.sin(2 * math.pi * self._fase)
+        x = (self.width() - tam.width()) / 2
+        y = 18 - 6 * ola                                         # flota 6 px arriba y abajo
+        # sombra que se achica cuando la ilustración sube
+        cx, base = self.width() / 2, 18 + tam.height() - 4
+        k = 0.85 + 0.15 * (1 + ola) / 2
+        sombra = estilo.alfa(QColor(0, 0, 0), int((60 if isDarkTheme() else 26) * k))
+        p.setPen(Qt.NoPen)
+        p.setBrush(sombra)
+        p.drawEllipse(QPointF(cx, base + 10), tam.width() * 0.32 * k, 7 * k)
+        p.drawPixmap(QPointF(x, y), pm)
+        # brillos que titilan desfasados
+        color = QColor(255, 255, 255) if isDarkTheme() else estilo.c("texto3")
+        for (fx, fy, r, desfase) in ((-0.02, 0.5, 7, 0.0), (0.66, -0.04, 6, 0.33), (1.0, 0.68, 8, 0.66)):
+            brillo = math.sin(math.pi * ((self._fase * 2 + desfase) % 1.0)) ** 2
+            col = QColor(color)
+            col.setAlpha(int(40 + 200 * brillo))
+            self._estrella(p, QPointF(x + tam.width() * fx, y + tam.height() * fy), r * (0.6 + 0.4 * brillo), col)
         p.end()
 
 
@@ -351,7 +395,7 @@ class HistorialInterface(QWidget):
         ve = QVBoxLayout(self.vacio)
         ve.setSpacing(10)
         ve.addStretch(1)
-        ve.addWidget(_MarcoIlustracion(300), 0, Qt.AlignHCenter)
+        ve.addWidget(_Ilustracion(250), 0, Qt.AlignHCenter)
         ve.addWidget(SubtitleLabel("Aquí aparecerán tus clientes"), 0, Qt.AlignHCenter)
         ve.addWidget(CaptionLabel("Cada comprobante que generes queda guardado con su saldo y sus abonos."),
                      0, Qt.AlignHCenter)

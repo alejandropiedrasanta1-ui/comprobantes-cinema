@@ -6,7 +6,7 @@ from pathlib import Path
 import math
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QMovie, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QWidget
 from qfluentwidgets import FluentIcon as FIF, isDarkTheme, qconfig
 
@@ -79,60 +79,6 @@ def animar(dueno, nombre, inicio, fin, ms, al_cambiar, curva=QEasingCurve.OutCub
 def salto(t):
     """Pequeño «pop»: 0 → sube a ~1.08 → 1 (para marcar un cambio de estado)."""
     return 1 + 0.08 * math.sin(math.pi * max(0.0, min(1.0, t)))
-
-
-class Animacion(QLabel):
-    """GIF animado hecho con Higgsfield (recursos/animaciones/<nombre>_oscuro|claro.gif), según el tema.
-    fondo = color del fondo del GIF (para pintar alrededor y que no se note el borde).
-    una_vez=True: se reproduce una vez y queda en el último cuadro (p. ej. «listo»)."""
-
-    def __init__(self, nombre, lado, una_vez=False, parent=None):
-        super().__init__(parent)
-        self.nombre, self.una_vez = nombre, una_vez
-        self.setFixedSize(lado if isinstance(lado, QSize) else QSize(lado, lado))
-        self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet("background:transparent")
-        self.movie = None
-        self.fondo = c("sup")
-        self._cargar()
-        qconfig.themeChanged.connect(self._cargar)
-
-    def _cargar(self, *_):
-        corriendo = self.movie is not None and self.movie.state() == QMovie.Running
-        if self.movie:
-            self.movie.stop()
-        archivo = Path(rutas.recurso(f"recursos/animaciones/{self.nombre}_{'oscuro' if isDarkTheme() else 'claro'}.gif"))
-        if not archivo.exists():
-            self.movie = None
-            return
-        self.movie = QMovie(str(archivo), parent=self)
-        self.movie.setCacheMode(QMovie.CacheAll)
-        self.movie.setScaledSize(self.size())
-        self.movie.frameChanged.connect(self._cuadro)
-        self.setMovie(self.movie)
-        self.movie.jumpToFrame(0)
-        img = self.movie.currentImage()
-        if not img.isNull():
-            self.fondo = QColor(img.pixel(3, 3))
-        if corriendo:
-            self.movie.start()
-
-    def iniciar(self):
-        if not self.movie:
-            return
-        if not ANIMAR:          # sin animaciones: el cuadro final quieto
-            self.movie.jumpToFrame(self.movie.frameCount() - 1 if self.una_vez else 0)
-            return
-        self.movie.stop()
-        self.movie.start()
-
-    def detener(self):
-        if self.movie:
-            self.movie.stop()
-
-    def _cuadro(self, n):
-        if self.una_vez and self.movie and n >= self.movie.frameCount() - 1:
-            self.movie.setPaused(True)
 
 
 def fuente_numeros(px, peso=QFont.DemiBold, base=None):

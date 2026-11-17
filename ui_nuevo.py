@@ -3,13 +3,13 @@
 Izquierda: pasos 1·2·3 y tres secciones (cliente y evento · paquete · pago y captura) con su estado.
 Derecha: lienzo punteado con la vista previa, que se actualiza sola mientras escribes.
 Abajo: barra fija con el saldo y los botones Copiar / WhatsApp / Generar."""
+import math
 import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QDate, QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import (QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout,
-                               QWidget)
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (CalendarPicker, CaptionLabel, FlowLayout, FluentIcon as FIF,
                             IndeterminateProgressRing, LineEdit, PrimaryPushButton, PushButton,
                             SegmentedWidget, SmoothScrollArea, StrongBodyLabel,
@@ -267,63 +267,84 @@ class _PildoraVivo(QWidget):
         p.end()
 
 
-class _Aviso(QWidget):
-    """Tarjeta flotante sobre la vista previa con una animación de Higgsfield: la claqueta mientras
-    PhotoCraft crea el comprobante, y el ✓ con destellos cuando queda listo. Aparece subiendo y se desvanece."""
+def _ease_in(t):
+    return t * t * t
 
-    def __init__(self, nombre, una_vez, parent):
+
+def _ease_out(t):
+    return 1 - (1 - t) ** 3
+
+
+def _ease_back(t, s=1.9):
+    t -= 1
+    return t * t * ((s + 1) * t + s) + 1
+
+
+class _Velo(QWidget):
+    """Capa sobre la vista previa, dibujada en vectores (nítida a cualquier tamaño y en ambos temas):
+    - «cargando»: la vista se atenúa con un velo suave y una claqueta golpea y suelta un recibo.
+    - «listo»: un círculo verde crece con rebote, el ✓ se dibuja y salta confeti; luego se desvanece.
+    No tiene caja propia: se funde con el panel."""
+
+    COLORES_CONFETI = ["#E5252A", "#F5C542", "#22C55E", "#FFFFFF", "#FF7A7E", "#3B82F6"]
+
+    def __init__(self, parent):
         super().__init__(parent)
-        self.anim = estilo.Animacion(nombre, 128, una_vez)
-        v = QVBoxLayout(self)
-        v.setContentsMargins(26, 16, 26, 18)
-        v.setSpacing(2)
-        v.addWidget(self.anim, 0, Qt.AlignHCenter)
-        self.texto = StrongBodyLabel("")
-        self.texto.setAlignment(Qt.AlignCenter)
-        f = self.texto.font()
-        f.setPixelSize(16)
-        self.texto.setFont(f)
-        v.addWidget(self.texto)
-        self.sub = CaptionLabel("")
-        self.sub.setAlignment(Qt.AlignCenter)
-        v.addWidget(self.sub)
-        self.efecto = QGraphicsOpacityEffect(self)
-        self.efecto.setOpacity(0.0)
-        self.setGraphicsEffect(self.efecto)
-        self._sube = 0.0
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.modo = None
+        self.titulo = self.sub = ""
+        self._opac = 0.0
+        self._t = 0.0
+        self._confeti = []
+        self._reloj = QVariantAnimation(self)
+        self._reloj.setStartValue(0.0)
+        self._reloj.setEndValue(1.0)
+        self._reloj.valueChanged.connect(self._tic)
         self.hide()
 
-    def paintEvent(self, e):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
-        p.setPen(QPen(estilo.c("borde2"), 1))
-        p.setBrush(self.anim.fondo)
-        p.drawRoundedRect(r, 20, 20)
-        p.end()
+    def _tic(self, v):
+        self._t = v
+        self.update()
 
-    def centrar(self):
-        if not self.parent():
-            return
-        self.adjustSize()
-        pr = self.parent().rect()
-        self.move(int((pr.width() - self.width()) / 2), int((pr.height() - self.height()) / 2 + 18 * (1 - self._sube)))
+    def _poner_opac(self, v):
+        self._opac = max(0.0, min(1.0, v))
+        self.update()
 
-    def _paso(self, v):
-        self._sube = v
-        self.efecto.setOpacity(v)
-        self.centrar()
+    def cubrir(self):
+        if self.parent():
+            self.setGeometry(self.parent().rect())
 
-    def mostrar(self, texto, sub="", ms_visible=None):
-        self.texto.setText(texto)
-        self.sub.setText(sub)
-        self.sub.setVisible(bool(sub))
-        self.centrar()
+    def _crear_confeti(self):
+        import random
+        azar = random.Random(7)
+        self._confeti = []
+        for i in range(34):
+            ang = math.radians(azar.uniform(-160, -20))          # hacia arriba, en abanico
+            vel = azar.uniform(170, 330)
+            self._confeti.append(dict(
+                vx=math.cos(ang) * vel, vy=math.sin(ang) * vel, giro=azar.uniform(-540, 540),
+                color=QColor(self.COLORES_CONFETI[i % len(self.COLORES_CONFETI)]),
+                w=azar.uniform(4, 8), h=azar.uniform(7, 12), redondo=azar.random() < 0.3,
+                retraso=azar.uniform(0, 0.06)))
+
+    def mostrar(self, modo, titulo, sub="", ms_visible=None):
+        self.modo, self.titulo, self.sub = modo, titulo, sub
+        self.cubrir()
         self.show()
         self.raise_()
-        self.anim.iniciar()
-        estilo.animar(self, "_ani", self.efecto.opacity(), 1.0, 300, self._paso, QEasingCurve.OutBack)
+        self._reloj.stop()
+        if modo == "listo":
+            self._crear_confeti()
+            self._reloj.setDuration(1500)
+            self._reloj.setLoopCount(1)
+        else:
+            self._reloj.setDuration(1150)
+            self._reloj.setLoopCount(-1)
+        if estilo.ANIMAR:
+            self._reloj.start()
+        else:
+            self._t = 1.0 if modo == "listo" else 0.5
+        estilo.animar(self, "_ani_op", self._opac, 1.0, 240, self._poner_opac)
         if ms_visible:
             QTimer.singleShot(ms_visible, self.ocultar)
 
@@ -333,9 +354,194 @@ class _Aviso(QWidget):
 
         def fin():
             self.hide()
-            self.anim.detener()
-        estilo.animar(self, "_ani", self.efecto.opacity(), 0.0, 260,
-                      lambda v: self.efecto.setOpacity(v), QEasingCurve.InCubic, fin)
+            self._reloj.stop()
+        estilo.animar(self, "_ani_op", self._opac, 0.0, 380, self._poner_opac, QEasingCurve.InOutQuad, fin)
+
+    # ---------- dibujo ----------
+    def paintEvent(self, e):
+        if self._opac <= 0:
+            return
+        p = QPainter(self)
+        p.setRenderHints(QPainter.Antialiasing | QPainter.TextAntialiasing)
+        base = estilo.c("panel")
+        velo = QColor(base)
+        velo.setAlpha(int((150 if self.modo == "cargando" else 110) * self._opac))
+        p.fillRect(self.rect(), velo)
+        centro = QPointF(self.width() / 2, self.height() / 2 - 26)
+        # halo: el centro queda limpio para la animación y el texto, y se funde hacia los bordes (sin caja)
+        halo = QRadialGradient(QPointF(centro.x(), centro.y() + 40), 250)
+        for pos, a in ((0.0, 250), (0.55, 225), (0.8, 110), (1.0, 0)):
+            col = QColor(base)
+            col.setAlpha(int(a * self._opac))
+            halo.setColorAt(pos, col)
+        p.setPen(Qt.NoPen)
+        p.setBrush(halo)
+        p.drawEllipse(QPointF(centro.x(), centro.y() + 40), 250, 250)
+        p.setOpacity(self._opac)
+        if self.modo == "cargando":
+            self._claqueta(p, centro, self._t)
+        else:
+            self._listo(p, centro, self._t)
+        f = QFont(self.font())
+        f.setPixelSize(17)
+        f.setWeight(QFont.DemiBold)
+        p.setFont(f)
+        p.setPen(estilo.c("texto"))
+        y = centro.y() + 66
+        p.drawText(QRectF(0, y, self.width(), 26), Qt.AlignCenter, self.titulo)
+        if self.sub:
+            f.setPixelSize(12)
+            f.setWeight(QFont.Normal)
+            p.setFont(f)
+            p.setPen(estilo.c("texto2"))
+            p.drawText(QRectF(0, y + 26, self.width(), 20), Qt.AlignCenter, self.sub)
+        p.end()
+
+    def _claqueta(self, p, c, t):
+        """Claqueta de línea: el brazo con franjas rojas baja de golpe, rebota apenas y vuelve a abrir;
+        en cada golpe sale un recibo por debajo y saltan tres rayitas de impacto."""
+        S = 92
+        tinta, fondo = estilo.c("texto"), estilo.c("sup2")
+        cuerpo = QRectF(c.x() - S / 2, c.y() - S * 0.12, S, S * 0.6)
+        # recibo que sale por debajo después del golpe
+        if t > 0.42:
+            k = _ease_out(min(1.0, (t - 0.42) / 0.38))
+            alfa_r = 1.0 if t < 0.85 else max(0.0, 1 - (t - 0.85) / 0.15)
+            ancho_r, alto_r = S * 0.56, S * 0.36
+            r = QRectF(c.x() - ancho_r / 2, cuerpo.bottom() - alto_r + 4 + alto_r * 0.82 * k, ancho_r, alto_r)
+            camino = QPainterPath(QPointF(r.left(), r.top()))
+            camino.lineTo(r.right(), r.top())
+            camino.lineTo(r.right(), r.bottom())
+            dientes = 6
+            for i in range(dientes, 0, -1):
+                x1 = r.left() + r.width() * (i - 0.5) / dientes
+                x2 = r.left() + r.width() * (i - 1) / dientes
+                camino.lineTo(x1, r.bottom() - 5)
+                camino.lineTo(x2, r.bottom())
+            camino.closeSubpath()
+            p.save()
+            p.setOpacity(p.opacity() * alfa_r)
+            p.setPen(QPen(tinta, 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            p.setBrush(estilo.c("sup"))
+            p.drawPath(camino)
+            p.setPen(QPen(estilo.c("texto3"), 2, Qt.SolidLine, Qt.RoundCap))
+            for i, ancho in enumerate((0.6, 0.42)):
+                yl = r.top() + r.height() * (0.42 + i * 0.22)
+                p.drawLine(QPointF(r.left() + 9, yl), QPointF(r.left() + 9 + (r.width() - 18) * ancho, yl))
+            p.restore()
+        # cuerpo
+        p.setPen(QPen(tinta, 2.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setBrush(fondo)
+        p.drawRoundedRect(cuerpo, 8, 8)
+        p.setPen(QPen(estilo.c("texto3"), 2.2, Qt.SolidLine, Qt.RoundCap))
+        for i in (1, 2):
+            yl = cuerpo.top() + cuerpo.height() * i / 3
+            p.drawLine(QPointF(cuerpo.left() + 12, yl), QPointF(cuerpo.right() - 12, yl))
+        # brazo: ángulo -26° (abierto) → 0° (golpe) con aceleración, y vuelve a abrir suave
+        if t < 0.42:
+            ang = -26 * (1 - _ease_in(t / 0.42))
+        elif t < 0.5:
+            ang = 2.2 * math.sin((t - 0.42) / 0.08 * math.pi)      # rebote mínimo al chocar
+        else:
+            ang = -26 * _ease_out((t - 0.5) / 0.5)
+        alto_b = S * 0.17
+        p.save()
+        p.translate(cuerpo.left(), cuerpo.top() - 3)
+        p.rotate(ang)
+        brazo = QRectF(0, -alto_b, S, alto_b)
+        camino = QPainterPath()
+        camino.addRoundedRect(brazo, 4, 4)
+        p.setPen(Qt.NoPen)
+        p.setBrush(fondo)
+        p.drawPath(camino)
+        p.setClipPath(camino)
+        p.setBrush(QColor(estilo.ROJO))
+        paso = S / 6
+        for i in range(-1, 7):                                       # franjas diagonales rojas
+            x = i * paso
+            franja = QPainterPath(QPointF(x, 0))
+            franja.lineTo(x + paso * 0.5, 0)
+            franja.lineTo(x + paso * 0.5 + alto_b * 0.8, -alto_b)
+            franja.lineTo(x + alto_b * 0.8, -alto_b)
+            franja.closeSubpath()
+            p.drawPath(franja)
+        p.setClipping(False)
+        p.setPen(QPen(tinta, 2.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(camino)
+        p.restore()
+        # bisagra
+        p.setPen(QPen(tinta, 2.4))
+        p.setBrush(fondo)
+        p.drawEllipse(QPointF(cuerpo.left() + 2, cuerpo.top() - 3), 4.5, 4.5)
+        # rayitas de impacto
+        if 0.4 < t < 0.62:
+            k = (t - 0.4) / 0.22
+            p.setPen(QPen(estilo.alfa(estilo.ROJO, int(255 * (1 - k))), 2.6, Qt.SolidLine, Qt.RoundCap))
+            base = QPointF(cuerpo.right() + 6, cuerpo.top() - 8)
+            for grados in (-35, 0, 35):
+                rad = math.radians(grados)
+                ini = base + QPointF(math.cos(rad), math.sin(rad)) * (4 + 8 * k)
+                fin = base + QPointF(math.cos(rad), math.sin(rad)) * (12 + 10 * k)
+                p.drawLine(ini, fin)
+
+    def _listo(self, p, c, t):
+        """Círculo verde que crece con rebote, onda que se expande, ✓ que se dibuja y confeti."""
+        R = 38
+        k = max(0.0, min(1.0, t / 0.32))
+        esc = _ease_back(k) if k < 1 else 1.0
+        self._pintar_confeti(p, c, R, t)          # detrás del círculo: sale desde su borde
+        # onda
+        if 0.18 < t < 0.75:
+            q = (t - 0.18) / 0.57
+            p.setPen(QPen(estilo.alfa(estilo.VERDE, int(150 * (1 - q))), 3))
+            p.setBrush(Qt.NoBrush)
+            p.drawEllipse(c, R + 26 * _ease_out(q), R + 26 * _ease_out(q))
+        # resplandor y círculo
+        p.setPen(Qt.NoPen)
+        for i, a in enumerate((38, 22, 10)):
+            p.setBrush(estilo.alfa(estilo.VERDE, int(a * esc)))
+            p.drawEllipse(c, R * esc + 6 + 6 * i, R * esc + 6 + 6 * i)
+        p.setBrush(QColor(estilo.VERDE))
+        p.drawEllipse(c, R * esc, R * esc)
+        # ✓ que se dibuja
+        trazo = max(0.0, min(1.0, (t - 0.26) / 0.3))
+        if trazo > 0:
+            a = c + QPointF(-R * 0.42, R * 0.02)
+            b = c + QPointF(-R * 0.1, R * 0.32)
+            d = c + QPointF(R * 0.45, -R * 0.3)
+            p.setPen(QPen(QColor("white"), 5.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            if trazo < 0.35:
+                p.drawLine(a, a + (b - a) * (trazo / 0.35))
+            else:
+                p.drawPolyline([a, b, b + (d - b) * _ease_out((trazo - 0.35) / 0.65)])
+    def _pintar_confeti(self, p, c, R, t):
+        """Confeti con gravedad, giro y desvanecido; cada pieza nace en el borde del círculo."""
+        if t > 0.34:
+            for q in self._confeti:
+                s = max(0.0, (t - 0.34 - q["retraso"]) / 0.66) * 1.15   # segundos simulados
+                if s <= 0:
+                    continue
+                vel = math.hypot(q["vx"], q["vy"]) or 1
+                x = c.x() + q["vx"] / vel * R * 0.95 + q["vx"] * s
+                y = c.y() + q["vy"] / vel * R * 0.95 + q["vy"] * s + 0.5 * 520 * s * s
+                alfa_c = max(0.0, 1 - s ** 1.6)
+                if alfa_c <= 0:
+                    continue
+                col = QColor(q["color"])
+                if col.lightness() > 240 and not isDarkTheme():
+                    col = estilo.c("texto3")
+                col.setAlpha(int(255 * alfa_c))
+                p.save()
+                p.translate(x, y)
+                p.rotate(q["giro"] * s)
+                p.setPen(Qt.NoPen)
+                p.setBrush(col)
+                if q["redondo"]:
+                    p.drawEllipse(QPointF(0, 0), q["w"] / 2, q["w"] / 2)
+                else:
+                    p.drawRoundedRect(QRectF(-q["w"] / 2, -q["h"] / 2, q["w"], q["h"]), 1.5, 1.5)
+                p.restore()
 
 
 class _Barra(QFrame):
@@ -523,8 +729,7 @@ class NuevoInterface(QWidget):
         self.area.setWidgetResizable(False)
         p.addWidget(self.area, 1)
         cuerpo.addWidget(panel, 56)
-        self.aviso_cargando = _Aviso("cargando", False, panel)   # animaciones de Higgsfield sobre la vista
-        self.aviso_listo = _Aviso("listo", True, panel)
+        self.velo = _Velo(panel)          # «generando» y «listo» animados sobre la vista previa
 
         # ================= Barra fija inferior =================
         barra = _Barra()
@@ -803,9 +1008,8 @@ class NuevoInterface(QWidget):
                                   Qt.KeepAspectRatio, Qt.SmoothTransformation)
         img.setDevicePixelRatio(dpr)
         self.lienzo.poner(img)
-        for aviso in (self.aviso_cargando, self.aviso_listo):
-            if aviso.isVisible():
-                aviso.centrar()
+        if self.velo.isVisible():
+            self.velo.cubrir()
         if (self.en_vivo.isChecked() and self.vista_ruta and self._imagen_actual() == self.vista_ruta
                 and max(self.pix.width(), self.pix.height()) + 48 < self._lado_vista()):
             self.temporizador.start()   # la ventana creció o hay zoom: pedir la vista más nítida
@@ -937,8 +1141,7 @@ class NuevoInterface(QWidget):
         self.estado.setText("PhotoCraft está creando el comprobante…")
         if self.compacto:
             self._ver_vista(True)
-        self.aviso_listo.hide()
-        self.aviso_cargando.mostrar("Creando el comprobante…", "PhotoCraft está armando el JPG")
+        self.velo.mostrar("cargando", "Creando el comprobante…", "PhotoCraft está armando el JPG")
         self.trabajo = Trabajo(self.datos, self.cfg)
         self.trabajo.listo.connect(self._listo)
         self.trabajo.fallo.connect(self._fallo)
@@ -947,7 +1150,7 @@ class NuevoInterface(QWidget):
     def _fin(self):
         self.btn_generar.setEnabled(True)
         self.ring.hide()
-        self.aviso_cargando.ocultar()
+        self.velo.ocultar()        # (si salió bien, _listo lo vuelve a mostrar en modo «listo»)
         self._acomodar()
 
     def _listo(self, ruta):
@@ -973,7 +1176,7 @@ class NuevoInterface(QWidget):
             self._ver_vista(True)       # en ventanas angostas se muestra el comprobante terminado
         self._poner_imagen(ruta)
         copiar_imagen(ruta)
-        self.aviso_listo.mostrar("¡Comprobante corregido!" if corregido else "¡Comprobante listo!",
+        self.velo.mostrar("listo", "¡Comprobante corregido!" if corregido else "¡Comprobante listo!",
                                  f"Guardado y copiado · pégalo en WhatsApp con {CTRL}V", 2600)
         aviso(self, "success", "Comprobante corregido" if corregido else "Comprobante listo",
               f"Guardado y copiado: pégalo en WhatsApp con {CTRL}V.", 7000, ruta_abrir=ruta)

@@ -21,7 +21,7 @@ REQUISITO EN CADA COMPUTADORA
 
 WINDOWS
 -------
-Instalar:  doble clic en  INSTALADOR\Instalar Comprobantes Cinema (Windows) 2.2.1.exe
+Instalar:  doble clic en  INSTALADOR\Instalar Comprobantes Cinema (Windows) 2.2.2.exe
            Se abre una ventana con los pasos y la barra de progreso (como el de CineSlide):
            instala el programa, las fuentes y los accesos directos (escritorio e Inicio),
            abre Comprobantes y se cierra sola. No pide permisos de administrador.
