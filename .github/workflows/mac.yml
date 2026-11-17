@@ -21,11 +21,11 @@ jobs:
             arq: Intel
             opcional: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Instalar dependencias
         run: python -m pip install --upgrade pip PySide6 PySide6-Fluent-Widgets Pillow pyinstaller dmgbuild
@@ -55,7 +55,7 @@ jobs:
           PYTHON=python empaquetar/crear_instalador_mac.sh "$PWD/empaquetar/dist-mac/Comprobantes Cinema.app" "$PWD/salida"
           ls -lh salida
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: instalador-mac-${{ runner.arch }}
           path: salida/*.dmg
@@ -107,7 +107,7 @@ jobs:
           pkill -f "Comprobantes Cinema.app/Contents/MacOS" || true
           hdiutil detach "$MNT" -force || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: capturas-mac-${{ runner.arch }}
