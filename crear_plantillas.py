@@ -152,6 +152,8 @@ def crear(clave, cfg):
     paquete = cfg["paquetes"][clave]
     items = paquete["incluye"]
     base = cfg["plantilla_base"]
+    if not Path(base).is_absolute():          # relativa a la carpeta PROGRAMA (DISEÑOS ORIGINALES/…)
+        base = str(Path(__file__).resolve().parent / base)
     capas = motor._capas(cfg, base)
     loc = motor._localizar(capas)
     por_nombre = {l["name"]: l for l in capas}

@@ -14,3 +14,6 @@ empaquetar/dist*/
 config.json
 *ajustes.json
 COMPROBANTES GENERADOS/
+
+# Diseños originales del estudio (PSD y cotizaciones con datos de clientes): nunca se suben
+DISEÑOS ORIGINALES/

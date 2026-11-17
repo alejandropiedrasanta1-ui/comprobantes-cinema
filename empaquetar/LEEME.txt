@@ -1,16 +1,16 @@
 COMPROBANTES CINEMA PRODUCTIONS - Cómo crear e instalar el programa
 ====================================================================
 
-CARPETAS
-  GENERADOR\PROGRAMA     todo el programa: código, plantillas PSD, fuentes, íconos y
-                         los scripts para crear los instaladores (carpeta empaquetar).
-                         Para usarlo sin instalar: doble clic en  ABRIR GENERADOR.bat
-  GENERADOR\INSTALADOR   - Comprobantes Cinema Portable.exe : PORTABLE, un solo archivo.
-                           Se abre con doble clic, sin instalar (también desde una USB).
-                           Guarda sus ajustes y la carpeta COMPROBANTES GENERADOS
-                           junto al .exe.
-                         - Instalar Comprobantes Cinema (Windows) 2.1.0.exe : el instalador
-                           para instalarlo en una computadora.
+CARPETAS (dentro de COMPROBANTE)
+  PROGRAMA      todo: código, plantillas PSD, íconos, los scripts para crear los
+                instaladores (carpeta empaquetar) y además:
+                  - DISEÑOS ORIGINALES     los PSD originales y las cotizaciones
+                  - COMPROBANTES GENERADOS comprobantes de la primera versión
+                Para usarlo sin instalar (con Python): doble clic en  ABRIR GENERADOR.bat
+  INSTALADOR    solo los instaladores:
+                  - Instalar Comprobantes Cinema (Windows) X.exe
+                  - Instalar Comprobantes Cinema (Mac Apple Silicon) X.dmg
+                  - Instalar Comprobantes Cinema (Mac Intel) X.dmg
 
 REQUISITO EN CADA COMPUTADORA
   - PhotoCraft instalado (el programa lo usa para editar los PSD).

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Crea en GENERADOR/INSTALADOR el instalador de Mac (ventana nativa, como CineSlide):
+# Crea en COMPROBANTE/INSTALADOR el instalador de Mac (ventana nativa, como CineSlide):
 #   "Instalar Comprobantes Cinema (Mac <tipo>) <versión>.dmg"
 # Uso en la Mac: abre Terminal, escribe  bash  (con un espacio), arrastra este archivo y pulsa Enter.
 # (Normalmente no hace falta: GitHub Actions lo crea solo en cada cambio.)
