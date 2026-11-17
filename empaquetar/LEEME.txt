@@ -22,30 +22,41 @@ REQUISITO EN CADA COMPUTADORA
 WINDOWS
 -------
 Instalar:  doble clic en  INSTALADOR\Instalar Comprobantes Cinema (Windows) 2.1.0.exe
-           (no pide permisos de administrador; crea acceso directo en el escritorio y en Inicio).
-Desinstalar:  Configuración > Aplicaciones > Comprobantes Cinema Productions.
+           Se abre una ventana con los pasos y la barra de progreso (como el de CineSlide):
+           instala el programa, las fuentes y los accesos directos (escritorio e Inicio),
+           abre Comprobantes y se cierra sola. No pide permisos de administrador.
+           Si ya está instalada esa versión, solo abre el programa.
+Desinstalar:  Configuración > Aplicaciones > Comprobantes Cinema Productions
+              (el historial de clientes y los comprobantes generados no se borran).
 
 Volver a crear el instalador (después de cambiar el programa o las plantillas):
   doble clic en  PROGRAMA\empaquetar\CREAR INSTALADOR WINDOWS.bat
-  (necesita Python con PySide6, PySide6-Fluent-Widgets, Pillow y PyInstaller, e Inno Setup 6).
+  (necesita Python con PySide6, PySide6-Fluent-Widgets, Pillow y PyInstaller).
+  El instalador es propio: empaquetar\windows\instalador_windows.cs (C#), se compila con el
+  csc.exe que ya trae Windows y lleva el programa en un .zip pegado al final del .exe.
 
 
 MAC
 ---
 Hay dos versiones en INSTALADOR (elige según el procesador de la Mac:  > Acerca de esta Mac):
-  - Comprobantes Cinema (Mac Apple Silicon) X.dmg   Mac con chip M1, M2, M3, M4…
-  - Comprobantes Cinema (Mac Intel) X.dmg           Mac con procesador Intel
-Instalar:  abre el .dmg y arrastra «Comprobantes Cinema» a Aplicaciones.
-           La primera vez ábrelo con clic derecho > Abrir (no está firmado por Apple).
+  - Instalar Comprobantes Cinema (Mac Apple Silicon) X.dmg   Mac con chip M1, M2, M3, M4…
+  - Instalar Comprobantes Cinema (Mac Intel) X.dmg           Mac con procesador Intel
+Instalar:  abre el .dmg y haz doble clic en «Instalar Comprobantes». Se abre una ventana con los
+           pasos y la barra de progreso: lo copia a Aplicaciones, lo fija en el Dock, abre
+           Comprobantes, se cierra y expulsa el disco.
+           Si macOS no lo deja abrir la primera vez (no está firmado por Apple):
+           Ajustes del Sistema > Privacidad y seguridad > «Abrir igualmente».
 Primera vez en la Mac:
   - Instala PhotoCraft para Mac.
   - Copia a la Mac la carpeta PROGRAMA\recursos\fuentes y en el programa ve a
     Ajustes > Fuentes del diseño > «Instalar desde carpeta…» (no van en el .dmg por licencia).
 
-Cómo se crean: GitHub Actions las compila solo en cada cambio que se sube al repositorio
+Cómo se crean: GitHub Actions los compila solo en cada cambio que se sube al repositorio
   https://github.com/alejandropiedrasanta1-ui/comprobantes-cinema  (pestaña Actions > artefactos).
-También se pueden crear en una Mac: Terminal > bash + arrastrar
-  PROGRAMA/empaquetar/CREAR APP MAC.command  > Enter.
+También se pueden crear en una Mac (con Xcode o «xcode-select --install»): Terminal > bash +
+  arrastrar PROGRAMA/empaquetar/CREAR APP MAC.command  > Enter.
+  La ventana del instalador es empaquetar/mac/instalador_mac.swift y el fondo del .dmg
+  empaquetar/mac/fondo.png (se dibuja con  python empaquetar/mac/crear_fondo_dmg.py  en Windows).
 
 
 DÓNDE QUEDA CADA COSA
