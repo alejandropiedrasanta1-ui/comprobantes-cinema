@@ -108,13 +108,17 @@ class Trabajo(QThread):
     listo = Signal(str)
     fallo = Signal(str)
 
-    def __init__(self, datos, cfg, destino=None, calidad=None):
+    def __init__(self, datos, cfg, destino=None, calidad=None, vista=False):
         super().__init__()
-        self.datos, self.cfg, self.destino, self.calidad = datos, cfg, destino, calidad
+        self.datos, self.cfg, self.destino, self.calidad, self.vista = datos, cfg, destino, calidad, vista
 
     def run(self):
         try:
-            self.listo.emit(str(motor.generar(self.datos, self.cfg, self.destino, self.calidad)))
+            if self.vista:  # vista en vivo: PhotoCraft queda abierto entre un cambio y otro
+                ruta = motor.generar_vista(self.datos, self.cfg, self.destino, self.calidad or 80)
+            else:
+                ruta = motor.generar(self.datos, self.cfg, self.destino, self.calidad)
+            self.listo.emit(str(ruta))
         except Exception as e:  # se muestra al usuario
             traceback.print_exc()
             self.fallo.emit(str(e))

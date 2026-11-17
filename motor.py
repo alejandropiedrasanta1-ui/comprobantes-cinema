@@ -1,6 +1,7 @@
 """Motor del generador: abre la plantilla PSD con PhotoCraft (sin ventana),
 cambia los textos, coloca la captura del pago y exporta un JPG.
 Las plantillas originales nunca se modifican."""
+import atexit
 import glob
 import json
 import os
@@ -8,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from datetime import date
 from pathlib import Path
@@ -115,17 +117,32 @@ _cache_capas = {}
 
 
 def _capas(cfg, plantilla):
-    """Lee el árbol de capas de la plantilla (en caché mientras el PSD no cambie)."""
-    clave = (plantilla, os.path.getmtime(plantilla))
+    """Lee el árbol de capas de la plantilla (en caché mientras el PSD no cambie). La caché también
+    se guarda en disco: así al abrir el programa no se vuelve a leer el PSD (~90 MB) solo para esto."""
+    st = os.stat(plantilla)
+    clave = (plantilla, st.st_mtime, st.st_size)
     if clave not in _cache_capas:
-        info = json.loads(_cli(cfg, "info", "--compact", plantilla))
-        planas = []
+        carpeta = Path(CONFIG_USUARIO).parent / "cache"
+        nombre = f"capas - {Path(plantilla).stem}"
+        archivo = carpeta / f"{nombre} - {int(st.st_mtime)}-{st.st_size}.json"
+        try:
+            planas = json.loads(archivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            info = json.loads(_cli(cfg, "info", "--compact", plantilla))
+            planas = []
 
-        def recorrer(ls):
-            for l in ls:
-                planas.append(l)
-                recorrer(l.get("children") or [])
-        recorrer(info["layers"])
+            def recorrer(ls):
+                for l in ls:
+                    planas.append(l)
+                    recorrer(l.get("children") or [])
+            recorrer(info["layers"])
+            try:
+                carpeta.mkdir(parents=True, exist_ok=True)
+                for viejo in carpeta.glob(f"{glob.escape(nombre)} - *.json"):  # de versiones anteriores del PSD
+                    viejo.unlink(missing_ok=True)
+                archivo.write_text(json.dumps(planas, ensure_ascii=False), encoding="utf-8")
+            except OSError:
+                pass
         _cache_capas[clave] = planas
     return _cache_capas[clave]
 
@@ -203,26 +220,38 @@ def _estilos_sustitutos(cfg, capas, ids):
     return estilos
 
 
-def _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos):
+def _argumentos(cmds):
+    """[(comando, parámetros)] → argumentos --cmd/--params de «photocraft-cli run»."""
+    args = []
+    for nombre, params in cmds:
+        args += ["--cmd", nombre, "--params", json.dumps(params, ensure_ascii=False)]
+    return args
+
+
+def _medir_cli(cfg, plantilla, cmds):
+    """Aplica los comandos a la plantilla (sin guardar) y devuelve el resultado de cada uno."""
+    return [json.loads(linea).get("result") or {}
+            for linea in _cli(cfg, "run", plantilla, *_argumentos(cmds)).splitlines() if linea.startswith("{")]
+
+
+def _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos, medir=None):
     """Mide los textos que cambian. Devuelve ({capa: estilo} para los que no caben,
-    {capa: dx} para mantener la alineación del diseño: reserva a la derecha, saldo centrado)."""
+    {capa: dx} para mantener la alineación del diseño: reserva a la derecha, saldo centrado).
+    medir(cmds) → resultados; sin él se abre la plantilla con «photocraft-cli run»."""
     ids = {loc[k]: k for k in LIMITE_DERECHO}
     alinear = {loc["reserva"]: "derecha", **{s: "centro" for s in loc["saldo"]}}
-    args = ["run", plantilla]
+    cmds = []
     for capa in [*ids, *alinear]:
-        args += ["--cmd", "type.edit", "--params",
-                 json.dumps({"layer": capa, "text": textos[capa]}, ensure_ascii=False)]
+        cmds.append(("type.edit", {"layer": capa, "text": textos[capa]}))
         if capa in estilos:
-            args += ["--cmd", "type.setStyle", "--params", json.dumps({"layer": capa, **estilos[capa]})]
+            cmds.append(("type.setStyle", {"layer": capa, **estilos[capa]}))
     tamano = {l["id"]: (l.get("text") or {}).get("sizePt") for l in capas}
     tamano.update({c: e["size"] for c, e in estilos.items()})
     original = {l["id"]: l.get("bounds") for l in capas}
     cajas = {}
-    for linea in _cli(cfg, *args).splitlines():
-        if linea.startswith("{"):
-            res = json.loads(linea).get("result") or {}
-            if res.get("layer") in (*ids, *alinear) and res.get("bounds"):
-                cajas[res["layer"]] = res["bounds"]  # la última medida (ya con la fuente final)
+    for res in (medir or (lambda c: _medir_cli(cfg, plantilla, c)))(cmds):
+        if res.get("layer") in (*ids, *alinear) and res.get("bounds"):
+            cajas[res["layer"]] = res["bounds"]  # la última medida (ya con la fuente final)
     movimientos = {}
     for capa, modo in alinear.items():
         if capa in cajas and original.get(capa):
@@ -280,11 +309,12 @@ def _nombre_archivo(carpeta, base):
 CONCEPTOS = {"RESERVA CON": "RESERVA", "ABONO": "ABONO", "PAGO FINAL": "PAGO FINAL"}
 
 
-def generar(datos, cfg=None, destino=None, calidad=None):
+def generar(datos, cfg=None, destino=None, calidad=None, sesion=None):
     """datos: evento, paquete, festejado, lugar, fecha_evento (date), fecha_comprobante (date),
     contacto, total, monto (o reserva), captura (ruta de imagen).
     Opcionales: concepto ("RESERVA CON", "ABONO", "PAGO FINAL") y saldo (lo que falta después
-    de este pago; si no se da, total - monto). Devuelve la ruta del JPG."""
+    de este pago; si no se da, total - monto). Devuelve la ruta del JPG.
+    sesion: SesionPhotoCraft ya abierta (vista en vivo); sin ella se usa «photocraft-cli run»."""
     cfg = cfg or cargar_config()
     paquete = cfg["paquetes"][datos["paquete"]]
     plantilla = ruta_plantilla(paquete)
@@ -311,7 +341,10 @@ def generar(datos, cfg=None, destino=None, calidad=None):
         textos[capa] = "PAGO COMPLETADO" if saldo <= 0 else f"SALDO PENDIENTE: {quetzales(saldo)}"
 
     estilos = _estilos_sustitutos(cfg, capas, textos)
-    ajustes, movimientos = _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos)
+    if sesion:
+        sesion.abrir(plantilla)
+    ajustes, movimientos = _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos,
+                                            sesion.medir if sesion else None)
     for capa, ajuste in ajustes.items():
         estilos.setdefault(capa, {}).update(ajuste)
 
@@ -321,10 +354,10 @@ def generar(datos, cfg=None, destino=None, calidad=None):
         tmp = Path(tempfile.gettempdir()) / f"cinema_captura_{os.getpid()}_{id(datos)}.png"
         _preparar_captura(datos["captura"], w, h, tmp)
 
-    args = ["run", plantilla]
+    cmds = []
 
     def cmd(nombre, params):
-        args.extend(["--cmd", nombre, "--params", json.dumps(params, ensure_ascii=False)])
+        cmds.append((nombre, params))
 
     for capa, texto in textos.items():
         cmd("type.edit", {"layer": capa, "text": texto})
@@ -351,13 +384,155 @@ def generar(datos, cfg=None, destino=None, calidad=None):
         destino = _nombre_archivo(
             salida, f"COMPROBANTE - {evento} {datos['paquete']} - {datos['festejado'].strip()} - "
                     f"{fe.day:02d}-{fe.month:02d}-{fe.year} - {CONCEPTOS.get(concepto, concepto)}")
-    # Sin metadatos: el XMP de los PSD puede traer textos viejos de las capas (datos de otros clientes)
-    args += ["--out", str(destino), "--quality", str(calidad or cfg.get("calidad_jpg", 92)), "--metadata", "none"]
+    calidad = calidad or cfg.get("calidad_jpg", 92)
     try:
-        _cli(cfg, *args)
+        if sesion:
+            sesion.aplicar(cmds)
+            sesion.guardar(destino, calidad)
+        else:
+            # Sin metadatos: el XMP de los PSD puede traer textos viejos de las capas (datos de otros clientes)
+            _cli(cfg, "run", plantilla, *_argumentos(cmds),
+                 "--out", str(destino), "--quality", str(calidad), "--metadata", "none")
     finally:
         if tmp:
             tmp.unlink(missing_ok=True)
     if not destino.exists():
         raise RuntimeError("PhotoCraft terminó pero no se creó el archivo.")
     return destino
+
+
+# ================= Vista en vivo rápida =================
+class SesionPhotoCraft:
+    """PhotoCraft abierto en segundo plano («photocraft-cli serve») para la vista en vivo: la plantilla
+    se abre una sola vez y cada cambio solo edita los textos y exporta (≈0,4 s en vez de 2-3 s).
+    Antes de cada vista se vuelve a la instantánea «base» (la plantilla tal como se abrió)."""
+    ESPERA_MAX = 40  # s por pedido; si PhotoCraft se cuelga se cierra y se usa el método normal
+
+    def __init__(self):
+        self.proc = None
+        self.clave = None        # (exe, carpetas de lectura, carpeta de escritura)
+        self.plantilla = None    # (ruta, fecha de modificación) del documento abierto
+        self.base = None         # id de la instantánea «base»
+        self.n = 0
+        atexit.register(self.cerrar)
+
+    def _iniciar(self, exe, lectura, escritura):
+        clave = (exe, frozenset(lectura), escritura)
+        if self.proc and self.proc.poll() is None and self.clave == clave:
+            return
+        self.cerrar()
+        if not os.path.isfile(exe):
+            raise RuntimeError("No se encontró PhotoCraft (photocraft-cli).\n"
+                               "Instálalo o indica dónde está con el botón «PhotoCraft…».")
+        args = [exe, "serve", "--automation-write-root", escritura]
+        for carpeta in sorted(lectura):
+            args += ["--automation-read-root", carpeta]
+        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                     errors="replace", creationflags=SIN_VENTANA)
+        self.clave = clave
+
+    def _pedir(self, metodo, params):
+        self.n += 1
+        reloj = threading.Timer(self.ESPERA_MAX, self.cerrar)  # al cerrarse, readline() devuelve vacío
+        reloj.start()
+        try:
+            self.proc.stdin.write(json.dumps({"id": self.n, "method": metodo, "params": params},
+                                             ensure_ascii=False) + "\n")
+            self.proc.stdin.flush()
+            while True:
+                linea = self.proc.stdout.readline()
+                if not linea:
+                    raise RuntimeError("PhotoCraft (vista en vivo) se cerró.")
+                try:
+                    r = json.loads(linea)
+                except ValueError:
+                    continue
+                if r.get("id") == self.n:
+                    break
+        except (OSError, ValueError, AttributeError) as e:
+            raise RuntimeError(f"PhotoCraft (vista en vivo) no responde: {e}")
+        finally:
+            reloj.cancel()
+        if not r.get("ok"):
+            raise RuntimeError(f"PhotoCraft (vista en vivo): {r.get('error')}")
+        return r.get("result") or {}
+
+    def _ejecutar(self, comando, params):
+        return self._pedir("engine.execute", {"command": comando, "params": params})
+
+    def preparar(self, cfg, destino):
+        tmp = str(Path(tempfile.gettempdir()).resolve())
+        lectura = {tmp, str(Path(rutas.recurso("PLANTILLAS")).resolve())}
+        self._iniciar(cfg.get("photocraft_cli") or "", lectura, str(Path(destino).parent.resolve()))
+
+    def abrir(self, plantilla):
+        clave = (plantilla, os.path.getmtime(plantilla))
+        if self.plantilla == clave:
+            return
+        carpeta = str(Path(plantilla).parent.resolve())
+        if carpeta not in self.clave[1]:  # plantilla fuera de PLANTILLAS: hay que reiniciar con permiso
+            self._iniciar(self.clave[0], self.clave[1] | {carpeta}, self.clave[2])
+        if self.plantilla:
+            try:
+                self._pedir("doc.close", {})
+            except RuntimeError:
+                pass
+        self.plantilla = None
+        self._pedir("doc.open", {"path": str(Path(plantilla).resolve())})
+        self.base = self._ejecutar("history.newSnapshot", {"name": "base"})["snapshot"]
+        self.plantilla = clave
+
+    def _a_base(self):
+        self._ejecutar("history.selectSnapshot", {"snapshot": self.base})
+
+    def medir(self, cmds):
+        self._a_base()
+        return [self._ejecutar(n, p) for n, p in cmds]
+
+    def aplicar(self, cmds):
+        self._a_base()
+        for nombre, params in cmds:
+            if nombre == "layer.smartObjects.replaceContents":
+                # en «serve» los comandos con rutas están desactivados: se usa el método del documento
+                self._pedir("doc.replaceSmartObject", {**params, "path": str(Path(params["path"]).resolve())})
+            else:
+                self._ejecutar(nombre, params)
+
+    def guardar(self, destino, calidad):
+        self._pedir("doc.save", {"path": str(Path(destino).resolve()), "quality": int(calidad),
+                                 "metadata": "none"})
+
+    def cerrar(self):
+        proc, self.proc, self.plantilla = self.proc, None, None
+        if proc and proc.poll() is None:
+            try:
+                proc.stdin.close()
+            except OSError:
+                pass
+            try:
+                proc.kill()
+            except OSError:
+                pass
+
+
+_sesion = SesionPhotoCraft()
+_fallos_sesion = 0
+
+
+def generar_vista(datos, cfg, destino, calidad=80):
+    """Vista previa en vivo: usa PhotoCraft ya abierto; si eso falla (o la versión de PhotoCraft no
+    tiene «serve»), hace la vista con el método normal. Tras 2 fallos seguidos ya no lo intenta."""
+    global _fallos_sesion
+    if _fallos_sesion < 2:
+        try:
+            _sesion.preparar(cfg, destino)
+            ruta = generar(datos, cfg, destino, calidad, sesion=_sesion)
+            _fallos_sesion = 0
+            return ruta
+        except Exception:
+            _fallos_sesion += 1
+            _sesion.cerrar()
+            if not os.path.isfile(cfg.get("photocraft_cli") or ""):
+                raise
+    return generar(datos, cfg, destino, calidad)

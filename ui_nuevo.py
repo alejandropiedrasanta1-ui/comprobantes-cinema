@@ -1,13 +1,13 @@
 """Pantalla «Nuevo comprobante» — vista previa protagonista.
 
 Izquierda: 3 bloques plegables (cliente y evento · paquete · pago y captura) que se marcan con ✓.
-Derecha: vista previa grande que se actualiza sola al dejar de escribir.
+Derecha: vista previa grande que se actualiza sola mientras escribes.
 Abajo: barra fija con el saldo y los botones Copiar / WhatsApp / Generar."""
 import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QImage, QPixmap
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import (CalendarPicker, CaptionLabel, FlowLayout, FluentIcon as FIF,
                             IndeterminateProgressRing, LineEdit, PrimaryPushButton, PushButton,
@@ -280,10 +280,20 @@ class NuevoInterface(QWidget):
         raiz.addWidget(barra)
 
         # ================= Señales =================
+        # Vista en vivo: se actualiza 0,35 s después de la última tecla y, si sigues escribiendo,
+        # al menos cada 0,9 s (no hay que esperar a dejar de escribir para ver el cambio).
         self.temporizador = QTimer(self)
         self.temporizador.setSingleShot(True)
-        self.temporizador.setInterval(1200)
+        self.temporizador.setInterval(350)
         self.temporizador.timeout.connect(self._render_vista)
+        self.tope_vista = QTimer(self)
+        self.tope_vista.setSingleShot(True)
+        self.tope_vista.setInterval(900)
+        self.tope_vista.timeout.connect(self._render_vista)
+        self.aviso_ring = QTimer(self)   # el anillo solo aparece si la vista tarda (sin parpadeos)
+        self.aviso_ring.setSingleShot(True)
+        self.aviso_ring.setInterval(450)
+        self.aviso_ring.timeout.connect(self.ring.show)
         for s in (self.festejado.textChanged, self.lugar.textChanged, self.telefono.textChanged,
                   self.fecha_evento.dateChanged, self.fecha_pago.dateChanged, self.total.valueChanged,
                   self.reserva.valueChanged, self.zona.cambiada):
@@ -363,6 +373,8 @@ class NuevoInterface(QWidget):
             self.estado.setText("Hay cambios sin generar · el comprobante guardado es el anterior")
         if programar and self.en_vivo.isChecked():
             self.temporizador.start()
+            if not self.tope_vista.isActive():
+                self.tope_vista.start()
 
     # ================= Vista previa =================
     def poner_en_vivo(self, si):
@@ -391,6 +403,8 @@ class NuevoInterface(QWidget):
             concepto="RESERVA CON" if monto < total else "PAGO FINAL", captura=self.zona.ruta)
 
     def _render_vista(self):
+        self.temporizador.stop()
+        self.tope_vista.stop()
         if not self.en_vivo.isChecked():
             return
         if self.vista_trabajo and self.vista_trabajo.isRunning():
@@ -399,29 +413,41 @@ class NuevoInterface(QWidget):
         self.vista_pendiente = False
         self.n_vista += 1
         destino = Path(tempfile.gettempdir()) / f"cinema_vista_{self.n_vista % 2}.jpg"
-        self.ring.show()
-        if not self.ultimo or self.sin_generar:
-            self.estado.setText("Actualizando la vista previa…")
-        self.vista_trabajo = Trabajo(self._datos(para_vista=True), self.cfg, destino=str(destino), calidad=80)
+        self.aviso_ring.start()
+        if self.vista_ruta is None and (not self.ultimo or self.sin_generar):
+            self.estado.setText("Preparando la vista previa…")
+        self.vista_trabajo = Trabajo(self._datos(para_vista=True), self.cfg, destino=str(destino), calidad=80,
+                                     vista=True)
         self.vista_trabajo.listo.connect(self._vista_lista)
         self.vista_trabajo.fallo.connect(self._vista_fallo)
         self.vista_trabajo.start()
 
     def _vista_lista(self, ruta):
-        self.ring.hide()
-        if self.vista_pendiente:
-            self._render_vista()
-            return
         if self.ultimo and not self.sin_generar:
+            self._parar_ring()
             return  # se está mostrando el comprobante final
+        # se muestra aunque ya haya otro cambio en cola: así se ve avanzar mientras escribes
         self.vista_ruta = ruta
         self.titulo_vista.setText("Vista previa en vivo")
-        self.estado.setText(("Hay cambios sin generar · " if self.sin_generar else "") +
-                            "Así quedará · se actualiza al dejar de escribir")
+        texto = (("Hay cambios sin generar · " if self.sin_generar else "") +
+                 "Así quedará · se actualiza mientras escribes")
+        if self.estado.text() != texto:
+            self.estado.setText(texto)
         self._poner_imagen(ruta)
+        if self.vista_pendiente:
+            self._render_vista()
+        else:
+            self._parar_ring()
+
+    def _parar_ring(self):
+        self.aviso_ring.stop()
+        self.ring.hide()
 
     def _vista_fallo(self, msg):
-        self.ring.hide()
+        self._parar_ring()
+        if self.vista_pendiente:   # el dato cambió mientras tanto: se reintenta con el nuevo
+            self._render_vista()
+            return
         self.estado.setText("No se pudo actualizar la vista previa: " + msg.splitlines()[0])
 
     def _mostrar_plantilla(self):
@@ -436,7 +462,9 @@ class NuevoInterface(QWidget):
         return self.vista_ruta
 
     def _poner_imagen(self, ruta):
-        self.pix = QPixmap(str(ruta))
+        # QImage y no QPixmap(ruta): QPixmap guarda en caché por nombre y hora (en segundos) y,
+        # con la vista en vivo rápida, podía mostrar la imagen anterior del mismo archivo.
+        self.pix = QPixmap.fromImage(QImage(str(ruta)))
         self._ajustar_imagen()
 
     def _ajustar_imagen(self):
