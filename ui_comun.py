@@ -536,6 +536,11 @@ class CampoFecha(QWidget):
     def _calendario(self):
         vista = FastCalendarView(self.window())
         vista.setDate(self._fecha)
+        for nivel in (vista.dayView, vista.monthView, vista.yearView):   # ▲ = adelante (mes siguiente) y
+            nivel.upButton.clicked.disconnect()                           # ▼ = atrás, como las flechas ↑ ↓
+            nivel.downButton.clicked.disconnect()                         # del campo (la librería lo hace al revés)
+            nivel.upButton.clicked.connect(nivel._onScrollDown)
+            nivel.downButton.clicked.connect(nivel._onScrollUp)
         flyout = Flyout.make(vista, self.edit, self.window(), FlyoutAnimationType.DROP_DOWN)
 
         def elegida(d):
