@@ -54,3 +54,12 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"
 [Run]
 ; Al terminar abre el programa (si falta PhotoCraft, el programa mismo lo avisa)
 Filename: "{app}\{#AppExe}"; Flags: nowait skipifsilent
+
+[Code]
+// Inno Setup siempre muestra «Listo para instalar» cuando todas las demás pantallas están
+// desactivadas: el instalador pulsa «Instalar» solo, para que sea de un único doble clic.
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpReady then
+    WizardForm.NextButton.OnClick(WizardForm.NextButton);
+end;

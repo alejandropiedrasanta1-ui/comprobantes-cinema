@@ -1,12 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Receta de PyInstaller para Windows (carpeta con .exe) y Mac (.app).
 # Se usa desde "CREAR INSTALADOR WINDOWS.bat" o "CREAR APP MAC.command".
+import re
 import sys
 from pathlib import Path
 
 RAIZ = Path(SPECPATH).parent
 ES_MAC = sys.platform == "darwin"
 NOMBRE = "Comprobantes Cinema"
+VERSION = re.search(r'VERSION\s*=\s*"([^"]+)"', (RAIZ / "rutas.py").read_text(encoding="utf-8")).group(1)
 
 datas = [
     (str(RAIZ / "config_default.json"), "."),
@@ -48,8 +50,8 @@ if ES_MAC:
         bundle_identifier="com.cinemaproductions.comprobantes",
         info_plist={
             "CFBundleDisplayName": "Comprobantes Cinema Productions",
-            "CFBundleShortVersionString": "2.1.0",
-            "CFBundleVersion": "2.1.0",
+            "CFBundleShortVersionString": VERSION,
+            "CFBundleVersion": VERSION,
             "NSHighResolutionCapable": True,
         },
     )

@@ -1,0 +1,33 @@
+<svg viewBox="0 0 1024 1024" width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Ícono «Claqueta y recibo» — Comprobantes · Cinema Productions -->
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff4a4f"/>
+      <stop offset="1" stop-color="#b8141a"/>
+    </linearGradient>
+    <linearGradient id="papel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ececf0"/>
+    </linearGradient>
+  </defs>
+  <!-- Fondo redondeado (forma de ícono de Mac) -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#fondo)"/>
+  <!-- Sombra suave del recibo -->
+  <path d="M302 344 H734 V792 L698 824 L662 792 L626 824 L590 792 L554 824 L518 792 L482 824 L446 792 L410 824 L374 792 L338 824 L302 792 Z" fill="#7a0b0f" opacity="0.28"/>
+  <!-- Recibo con borde de corte en zigzag -->
+  <path d="M296 330 H728 V780 L692 812 L656 780 L620 812 L584 780 L548 812 L512 780 L476 812 L440 780 L404 812 L368 780 L332 812 L296 780 Z" fill="url(#papel)"/>
+  <!-- Base de la claqueta -->
+  <rect x="296" y="318" width="432" height="34" fill="#0b0b0c"/>
+  <!-- Brazo de la claqueta con franjas -->
+  <g transform="rotate(-9 266 318)">
+    <rect x="266" y="214" width="492" height="104" rx="18" fill="#0b0b0c"/>
+    <polygon points="322,214 374,214 334,318 282,318" fill="#ffffff"/>
+    <polygon points="414,214 466,214 426,318 374,318" fill="#ffffff"/>
+    <polygon points="506,214 558,214 518,318 466,318" fill="#ffffff"/>
+    <polygon points="598,214 650,214 610,318 558,318" fill="#ffffff"/>
+    <polygon points="690,214 742,214 702,318 650,318" fill="#ffffff"/>
+  </g>
+  <!-- Q de quetzales y renglón -->
+  <text x="512" y="640" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="230" fill="#0b0b0c">Q</text>
+  <rect x="380" y="690" width="264" height="26" rx="13" fill="#cfcfd4"/>
+</svg>

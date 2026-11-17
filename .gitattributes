@@ -7,3 +7,5 @@
 *.sh text eol=lf
 *.bat text eol=crlf
 *.applescript text eol=lf
+*.swift text eol=lf
+*.cs text eol=crlf
