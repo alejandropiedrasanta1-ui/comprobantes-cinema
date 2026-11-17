@@ -505,7 +505,7 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None)
         sesion.poner_base((clave_captura, clave_lista), cmds_captura + cmds_lista)
 
     ajustes, movimientos = _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos,
-                                            sesion.medir if sesion else None, centros)
+                                            sesion.medir_textos if sesion else None, centros)
     for capa, ajuste in ajustes.items():
         estilos.setdefault(capa, {}).update(ajuste)
 
@@ -520,14 +520,19 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None)
             cmd("type.setStyle", {"layer": capa, **estilos[capa]})
         if capa in movimientos:
             cmd("type.edit", {"layer": capa, "move": [movimientos[capa], 0]})
+    vis_plantilla = {l["id"]: l.get("visible") for l in capas}
+
+    def visible(capa, si):   # en la vista en vivo solo si cambia respecto a la plantilla
+        if not (sesion and vis_plantilla.get(capa) == si):
+            cmd("layer.setProps", {"layer": capa, "visible": si})
     es_xv = evento == "XV"
     if loc["icono_boda"]:
-        cmd("layer.setProps", {"layer": loc["icono_boda"], "visible": not es_xv})
+        visible(loc["icono_boda"], not es_xv)
     if loc["icono_xv"]:
-        cmd("layer.setProps", {"layer": loc["icono_xv"], "visible": es_xv})
+        visible(loc["icono_xv"], es_xv)
     for clave in ("saldo_monto", "raya_saldo"):
         if loc[clave]:
-            cmd("layer.setProps", {"layer": loc[clave], "visible": not completo})
+            visible(loc[clave], not completo)
 
     if destino:  # vista previa: archivo temporal indicado, se sobrescribe
         destino = Path(destino)
@@ -540,7 +545,7 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None)
                     f"{fe.day:02d}-{fe.month:02d}-{fe.year} - {CONCEPTOS.get(concepto, concepto)}")
     calidad = calidad or cfg.get("calidad_jpg", 92)
     if sesion:
-        sesion.aplicar(cmds)
+        sesion.aplicar_vista(cmds)
         if lado:   # vista en vivo: imagen en memoria del tamaño de la pantalla (sin exportar el JPG completo)
             destino = destino.with_suffix(".png")
             destino.write_bytes(sesion.pintar(lado))
@@ -562,13 +567,14 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None)
 # ================= Vista en vivo rápida =================
 class SesionPhotoCraft:
     """PhotoCraft abierto en segundo plano («photocraft-cli serve») para la vista en vivo.
-    - La plantilla del paquete se abre una sola vez y queda abierta con una instantánea «base» (con la
-      captura del pago ya puesta); antes de cada vista se vuelve a ella, se cambian los textos y se
-      pinta en memoria del tamaño de la pantalla.
+    - La plantilla se abre una sola vez (al abrir el programa, ver calentar_vista) y queda abierta con
+      una instantánea «base» (con la captura del pago y la lista ya puestas) y otra «fija» con todo lo
+      que no está cambiando (ver aplicar_vista): en cada tecla solo se tocan las capas que cambian y se
+      pinta en memoria del tamaño de la pantalla. Los comandos van en lotes (un pedido cada uno).
     - Una plantilla por proceso: PhotoCraft numera las capas por proceso (una segunda plantilla, o la
-      misma reabierta, ya no tiene los números que da «info»), así que al cambiar de paquete se abre
-      PhotoCraft de nuevo (≈1 s). Tener varias abiertas a la vez gastaría ~1 GB de RAM por plantilla.
-    Una vista tarda ≈0,15-0,2 s (antes 2-3 s: el PSD de ~90 MB se abría dos veces en cada cambio)."""
+      misma reabierta, ya no tiene los números que da «info»), así que si cambia el PSD se abre
+      PhotoCraft de nuevo (≈1,5 s). Tener varias abiertas a la vez gastaría ~1 GB de RAM por plantilla.
+    Una vista tarda ≈0,12 s, casi todo el «doc.render» de PhotoCraft (~0,11 s, igual a cualquier tamaño)."""
     ESPERA_MAX = 40   # s por pedido; si PhotoCraft se cuelga se cierra y se usa el método normal
     LADO_MAX = 2048   # lo más grande que pinta «doc.render»
 
@@ -628,11 +634,29 @@ class SesionPhotoCraft:
             raise RuntimeError(f"PhotoCraft (vista en vivo): {r.get('error')}")
         return r.get("result") or {}
 
-    def _ejecutar(self, comando, params):
+    @staticmethod
+    def _paso(comando, params):
         if comando == "layer.smartObjects.replaceContents":
             # en «serve» los comandos con rutas están desactivados: se usa el método del documento
-            return self._pedir("doc.replaceSmartObject", {**params, "path": str(Path(params["path"]).resolve())})
-        return self._pedir("engine.execute", {"command": comando, "params": params})
+            return "doc.replaceSmartObject", {**params, "path": str(Path(params["path"]).resolve())}
+        return "engine.execute", {"command": comando, "params": params}
+
+    def _ejecutar(self, comando, params):
+        return self._pedir(*self._paso(comando, params))
+
+    def _lote(self, cmds):
+        """Varios comandos en un solo pedido («batch»). PhotoCraft se detiene en el primero que falla."""
+        if not cmds:
+            return []
+        pasos = [dict(zip(("method", "params"), self._paso(c, p))) for c, p in cmds]
+        r = self._pedir("batch", {"steps": pasos})
+        resultados = r.get("results") or []
+        for (comando, _), res in zip(cmds, resultados):
+            if not res.get("ok"):
+                raise RuntimeError(f"PhotoCraft (vista en vivo): {comando}: {res.get('error')}")
+        if len(resultados) != len(cmds):
+            raise RuntimeError("PhotoCraft (vista en vivo): el lote quedó incompleto.")
+        return [res.get("result") or {} for res in resultados]
 
     def preparar(self, cfg):
         if self.reiniciar:
@@ -662,6 +686,7 @@ class SesionPhotoCraft:
         self._pedir("doc.open", {"path": str(Path(plantilla).resolve())})
         base = self._ejecutar("history.newSnapshot", {"name": "base"})["snapshot"]
         self.doc = dict(plantilla=plantilla, clave=clave, base0=base, base=base, captura=None)
+        self._olvidar_fija()
 
     def poner_base(self, clave, cmds):
         """Deja la captura del pago (o el recuadro de ejemplo) y la lista de servicios en la instantánea
@@ -670,30 +695,102 @@ class SesionPhotoCraft:
         if d["captura"] == clave:
             return
         self._ejecutar("history.selectSnapshot", {"snapshot": d["base0"]})
+        self._olvidar_fija()
         if d["base"] != d["base0"]:
-            try:
-                self._ejecutar("history.deleteSnapshot", {"snapshot": d["base"]})
-            except RuntimeError:
-                pass
+            self._borrar_instantanea(d["base"])
             d["base"] = d["base0"]
         d["captura"] = None
         if cmds:
-            for nombre, params in cmds:
-                self._ejecutar(nombre, params)
+            self._lote(cmds)
             d["base"] = self._ejecutar("history.newSnapshot", {"name": "captura"})["snapshot"]
         d["captura"] = clave
 
-    def _a_base(self):
-        self._ejecutar("history.selectSnapshot", {"snapshot": self.doc["base"]})
+    def _borrar_instantanea(self, n):
+        try:
+            self._ejecutar("history.deleteSnapshot", {"snapshot": n})
+        except RuntimeError:
+            pass
+
+    def _volver(self, a="base"):
+        return ("history.selectSnapshot", {"snapshot": self.doc[a]})
 
     def medir(self, cmds):
-        self._a_base()
-        return [self._ejecutar(n, p) for n, p in cmds]
+        """Vuelve a la base, aplica los comandos y devuelve el resultado de cada uno (todo en un pedido)."""
+        self.doc["estado"] = None
+        return self._lote([self._volver(), *cmds])[1:]
+
+    # ---- vista en vivo incremental ----
+    # Al escribir solo cambian una o dos capas. Se guarda una instantánea «fija» = base + todo lo de la
+    # vista anterior menos las capas «calientes» (las que estaban cambiando), que ahí siguen como en la
+    # plantilla. En cada tecla se vuelve a la fija y solo se ponen las calientes: menos comandos y menos
+    # capas que PhotoCraft tiene que volver a dibujar. Las capas no se mezclan entre sí, así que el
+    # resultado es idéntico a ponerlo todo desde la base. Las medidas (misma capa, texto y estilo →
+    # misma caja) se recuerdan.
+    MAX_MEDIDAS = 400
+
+    def _olvidar_fija(self):
+        d = self.doc
+        if d.get("fija") is not None:
+            self._borrar_instantanea(d["fija"])
+        d.update(fija=None, horneado={}, calientes=set(), medidas={}, estado=None, puestas={}, ultimo={})
+
+    @staticmethod
+    def _por_capa(cmds):
+        grupos = {}
+        for c, p in cmds:
+            grupos.setdefault(p["layer"], []).append((c, p))
+        return grupos
+
+    def medir_textos(self, cmds):
+        """Como medir(), pero mide solo lo que no se ha medido antes, y si esas capas están calientes lo
+        hace sobre la instantánea fija (queda puesto para aplicar_vista)."""
+        d = self.doc
+        grupos = self._por_capa(cmds)
+        claves = {capa: json.dumps(g, sort_keys=True, ensure_ascii=False) for capa, g in grupos.items()}
+        nuevas = [capa for capa in grupos if (capa, claves[capa]) not in d["medidas"]]
+        d["estado"], d["puestas"] = None, {}
+        if nuevas:
+            if len(d["medidas"]) > self.MAX_MEDIDAS:
+                d["medidas"].clear()
+            desde = "fija" if d["fija"] is not None and set(nuevas) <= d["calientes"] else "base"
+            pasos = [c for capa in nuevas for c in grupos[capa]]
+            res = self._lote([self._volver(desde), *pasos])[1:]
+            for capa in nuevas:
+                n = len(grupos[capa])
+                d["medidas"][(capa, claves[capa])], res = res[:n], res[n:]
+            d["estado"], d["puestas"] = desde, {capa: grupos[capa] for capa in nuevas}
+        return [r for capa in grupos for r in d["medidas"][(capa, claves[capa])]]
+
+    def aplicar_vista(self, cmds):
+        """Deja el documento con cmds (todos los cambios de la vista, contados desde la base)."""
+        d = self.doc
+        grupos = self._por_capa(cmds)
+        ultimo = d["ultimo"]   # lo de la vista anterior
+        cambiadas = {capa for capa in set(grupos) | set(ultimo) if grupos.get(capa, []) != ultimo.get(capa, [])}
+        if d["fija"] is not None and cambiadas <= d["calientes"] and len(d["calientes"] - cambiadas) <= 1:
+            sobre_fija = d["estado"] == "fija"
+            puestas = d["puestas"] if sobre_fija else {}
+            pasos = [] if sobre_fija else [self._volver("fija")]
+            for capa in d["calientes"]:
+                g, m = grupos.get(capa, []), puestas.get(capa)
+                # lo medido ya está puesto: si la vista empieza igual, solo falta el resto (p. ej. moverla)
+                pasos += g[len(m):] if m is not None and g[:len(m)] == m else g
+            self._lote(pasos)
+        else:   # cambió otra capa: se rehace la fija con todo menos las que cambian ahora
+            calientes = cambiadas
+            if d["fija"] is not None:
+                self._borrar_instantanea(d["fija"])
+                d["fija"] = None
+            self._lote([self._volver(), *(c for capa, g in grupos.items() if capa not in calientes for c in g)])
+            d["fija"] = self._ejecutar("history.newSnapshot", {"name": "fija"})["snapshot"]
+            d["horneado"] = {capa: g for capa, g in grupos.items() if capa not in calientes}
+            d["calientes"] = calientes
+            self._lote([c for capa in calientes for c in grupos.get(capa, [])])
+        d["estado"], d["puestas"], d["ultimo"] = None, {}, grupos
 
     def aplicar(self, cmds):
-        self._a_base()
-        for nombre, params in cmds:
-            self._ejecutar(nombre, params)
+        self.doc["estado"] = None
+        self._lote([self._volver(), *cmds])
 
     def pintar(self, lado):
         """La imagen del documento como PNG (bytes), con su lado mayor = lado px (máx. 2048)."""
@@ -720,6 +817,24 @@ class SesionPhotoCraft:
 _sesion = SesionPhotoCraft()
 _fallos_sesion = 0
 _exe_sesion = None   # los fallos cuentan por PhotoCraft: si se elige otro, se vuelve a intentar
+
+
+def calentar_vista(datos, cfg, lado):
+    """Al abrir el programa (en segundo plano): abre PhotoCraft y la plantilla y prepara una vista sin
+    mostrarla, para que la primera tecla no espere el arranque (~2 s). Si algo falla no avisa: la vista
+    normal lo intentará y mostrará el error."""
+    if not os.path.isfile(cfg.get("photocraft_cli") or "") or _fallos_sesion >= 2:
+        return
+    destino = Path(tempfile.gettempdir()) / f"cinema_vista_calentar_{os.getpid()}.jpg"
+    try:
+        with _sesion.candado:
+            if _sesion.doc is not None:   # ya hubo una vista: nada que preparar
+                return
+            _sesion.preparar(cfg)
+            ruta = generar(datos, cfg, destino, 80, sesion=_sesion, lado=lado)
+        Path(ruta).unlink(missing_ok=True)
+    except Exception:
+        _sesion.cerrar()
 
 
 def generar_vista(datos, cfg, destino, calidad=80, lado=None):

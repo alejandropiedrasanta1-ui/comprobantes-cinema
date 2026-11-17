@@ -5,10 +5,12 @@ Derecha: lienzo punteado con la vista previa, que se actualiza sola mientras esc
 Abajo: barra fija con el saldo y los botones Copiar / WhatsApp / Generar."""
 import math
 import tempfile
+import threading
+import time
 from pathlib import Path
 
-from PySide6.QtCore import (QDate, QEasingCurve, QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation,
-                            Signal)
+from PySide6.QtCore import (QAbstractAnimation, QDate, QEasingCurve, QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer,
+                            QVariantAnimation, Signal)
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (Action, CaptionLabel, FlowLayout, FluentIcon as FIF, RoundMenu,
@@ -156,18 +158,58 @@ class _Desvanecido(QWidget):
 
 
 class _PanelVista(QFrame):
-    """Fondo del lado de la vista previa: un poco más claro que la ventana, con una cuadrícula de puntos."""
+    """Fondo del lado de la vista previa: una tarjeta con esquinas suaves, con una cuadrícula de puntos.
+    Los puntos son un mosaico ya dibujado (uno solo por tema y pantalla): el panel se repinta en cada
+    cuadro del zoom animado y así no cuesta nada."""
+    MARGEN = (6, 12, 14, 12)   # izquierda, arriba, derecha, abajo: aire para que se vean las esquinas
+    RADIO = 12
+    PASO = 22                  # separación de los puntos
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._mosaico = None   # (clave, QPixmap)
+
+    def tarjeta(self):
+        i, a, d, b = self.MARGEN
+        return QRectF(self.rect()).adjusted(i + 0.5, a + 0.5, -d - 0.5, -b - 0.5)
+
+    def _puntos(self):
+        dpr = self.devicePixelRatioF()
+        clave = (isDarkTheme(), dpr)
+        if not self._mosaico or self._mosaico[0] != clave:
+            lado = self.PASO
+            pm = QPixmap(round(lado * dpr), round(lado * dpr))
+            pm.setDevicePixelRatio(dpr)
+            pm.fill(Qt.transparent)
+            q = QPainter(pm)
+            q.setRenderHint(QPainter.Antialiasing)
+            q.setPen(Qt.NoPen)
+            q.setBrush(estilo.c("punto"))
+            q.drawEllipse(QPointF(lado / 2, lado / 2), 1.1, 1.1)
+            q.end()
+            self._mosaico = (clave, pm)
+        return self._mosaico[1]
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        for hijo in self.children():   # el velo de «generando» sigue a la tarjeta
+            if isinstance(hijo, _Velo) and hijo.isVisible():
+                hijo.cubrir()
 
     def paintEvent(self, e):
         p = QPainter(self)
-        p.fillRect(self.rect(), estilo.c("panel"))
-        p.setPen(Qt.NoPen)
-        p.setBrush(estilo.c("punto"))
-        paso = 22
-        for y in range(paso // 2, self.height(), paso):
-            for x in range(paso // 2, self.width(), paso):
-                p.drawEllipse(QPointF(x, y), 1.1, 1.1)
-        p.fillRect(QRectF(0, 0, 1, self.height()), estilo.c("borde"))
+        p.setRenderHint(QPainter.Antialiasing)
+        r = self.tarjeta()
+        forma = QPainterPath()
+        forma.addRoundedRect(r, self.RADIO, self.RADIO)
+        p.fillPath(forma, estilo.c("panel"))
+        p.save()
+        p.setClipPath(forma)
+        p.drawTiledPixmap(r.toAlignedRect(), self._puntos())
+        p.restore()
+        p.setPen(QPen(estilo.c("borde"), 1))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(forma)
         p.end()
 
 
@@ -175,16 +217,33 @@ class _Lienzo(QWidget):
     """El comprobante flotando sobre el panel, con sombra suave (pintada: no frena la vista en vivo).
     Cada vista nueva entra con un fundido cruzado sobre la anterior; la primera, subiendo suavemente."""
 
+    SEGUIDAS = 0.6   # s: vistas más seguidas que esto (escribiendo) cambian al instante, sin fundido
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.pm = None
+        self.pm = None         # la imagen ya escalada al tamaño en pantalla (nítida)
+        self.fuente = None     # la imagen original: se usa mientras el zoom está animándose
+        self.escalando = False
         self.previo = None
         self._t = 1.0          # 0 → 1: fundido de la imagen anterior a la nueva
         self._entrada = 1.0    # 0 → 1: la primera imagen sube y aparece
+        self._ultima = 0.0     # cuándo llegó la imagen anterior
 
-    def poner(self, pm):
+    def escalar(self, ancho, alto):
+        """Un cuadro del zoom animado: solo cambia el tamaño en pantalla y dibuja la imagen original
+        escalada al vuelo (rápido). Al terminar, poner() deja la imagen nítida de ese tamaño."""
+        self.escalando = True
+        self.previo = None
+        m = MARGEN_LIENZO
+        self.resize(round(ancho) + 2 * m, round(alto) + 2 * m)
+        self.update()
+
+    def poner(self, pm, fundido=True):
         anterior = self.pm
         self.pm = pm
+        self.escalando = False
+        ahora = time.monotonic()
+        seguidas, self._ultima = ahora - self._ultima < self.SEGUIDAS, ahora
         m = MARGEN_LIENZO
         tam = pm.deviceIndependentSize().toSize()
         mismo_tam = anterior is not None and anterior.deviceIndependentSize().toSize() == tam
@@ -192,10 +251,12 @@ class _Lienzo(QWidget):
         if anterior is None:
             self.previo = None
             estilo.animar(self, "_ani_e", 0.0, 1.0, 420, self._paso_e, QEasingCurve.OutCubic)
-        elif mismo_tam and anterior.cacheKey() != pm.cacheKey():
-            self.previo = anterior
-            estilo.animar(self, "_ani", 0.0, 1.0, 160, self._paso, QEasingCurve.InOutQuad)
+        elif fundido and mismo_tam and anterior.cacheKey() != pm.cacheKey() and not seguidas:
+            self.previo = anterior   # un cambio suelto (p. ej. Boda → XV): fundido corto
+            estilo.animar(self, "_ani", 0.0, 1.0, 110, self._paso, QEasingCurve.OutQuad)
         else:
+            if getattr(self, "_ani", None) is not None:
+                self._ani.stop()
             self.previo = None
             self._t = 1.0
             self.update()
@@ -209,7 +270,7 @@ class _Lienzo(QWidget):
         self.update()
 
     def paintEvent(self, e):
-        if not self.pm:
+        if not self.pm and not (self.escalando and self.fuente is not None):
             return
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -226,7 +287,10 @@ class _Lienzo(QWidget):
             p.setBrush(QColor(0, 0, 0, int(a)))
             g = 2 + i * 2.2
             p.drawRoundedRect(r.adjusted(-g, -g + 6, g, g + 6), 6 + g, 6 + g)
-        if self.previo is not None and self._t < 1:
+        if self.escalando and self.fuente is not None and not self.fuente.isNull():
+            p.setRenderHint(QPainter.SmoothPixmapTransform)   # zoom animándose: la original, al vuelo
+            p.drawPixmap(r, self.fuente, QRectF(self.fuente.rect()))
+        elif self.previo is not None and self._t < 1:
             p.drawPixmap(r.topLeft(), self.previo)
             opacidad = p.opacity()
             p.setOpacity(opacidad * self._t)
@@ -363,8 +427,9 @@ class _Velo(QWidget):
         self.update()
 
     def cubrir(self):
-        if self.parent():
-            self.setGeometry(self.parent().rect())
+        padre = self.parent()
+        if padre:   # sobre la tarjeta del panel (con sus esquinas), o todo el padre
+            self.setGeometry(padre.tarjeta().toAlignedRect() if hasattr(padre, "tarjeta") else padre.rect())
 
     def _crear_confeti(self):
         import random
@@ -418,6 +483,9 @@ class _Velo(QWidget):
         base = estilo.c("panel")
         velo = QColor(base)
         velo.setAlpha(int((150 if self.modo == "cargando" else 110) * self._opac))
+        forma = QPainterPath()   # las mismas esquinas suaves de la tarjeta del panel
+        forma.addRoundedRect(QRectF(self.rect()), _PanelVista.RADIO, _PanelVista.RADIO)
+        p.setClipPath(forma)
         p.fillRect(self.rect(), velo)
         centro = QPointF(self.width() / 2, self.height() / 2 - 26)
         # halo: el centro queda limpio para la animación y el texto, y se funde hacia los bordes (sin caja)
@@ -625,7 +693,19 @@ class NuevoInterface(QWidget):
         self._hilos_vista = set()   # hilos vivos: se sueltan recién cuando terminan del todo
         self.vista_ruta = None
         self.n_vista = 0
-        self.zoom = 1.0             # zoom de la vista previa (1 = ajustada al panel)
+        self.zoom = 1.0             # zoom de la vista previa (1 = ajustada al panel); el que se ve ahora
+        self._zoom_meta = 1.0       # a dónde va (la rueda anima de self.zoom hacia aquí)
+        self._zoom_ancla = QPointF()
+        self._zoom_prop = (0.5, 0.5)
+        self._zoom_calidad = QTimer(self)   # el deslizador: imagen nítida cuando se deja de mover
+        self._zoom_calidad.setSingleShot(True)
+        self._zoom_calidad.setInterval(120)
+        self._zoom_calidad.timeout.connect(self._zoom_listo)
+        self._ani_zoom = QVariantAnimation(self)
+        self._ani_zoom.setDuration(180)
+        self._ani_zoom.setEasingCurve(QEasingCurve.OutCubic)
+        self._ani_zoom.valueChanged.connect(self._zoom_visual)
+        self._ani_zoom.finished.connect(self._zoom_listo)
         self.compacto = None
         self.viendo_vista = False
         self.apretado = False       # ventana baja: formulario con menos aire para que quepa sin scroll
@@ -753,7 +833,8 @@ class NuevoInterface(QWidget):
         # ================= Vista previa protagonista =================
         panel = self.panel_vista = _PanelVista()
         p = QVBoxLayout(panel)
-        p.setContentsMargins(22, 18, 22, 10)
+        i, a, d, b = _PanelVista.MARGEN     # dentro de la tarjeta, con su propio aire
+        p.setContentsMargins(i + 18, a + 12, d + 14, b + 6)
         p.setSpacing(6)
         cabv = QHBoxLayout()
         cabv.setSpacing(10)
@@ -783,13 +864,13 @@ class NuevoInterface(QWidget):
         self.deslizador_zoom.setPageStep(50)
         self.deslizador_zoom.setValue(100)
         self.deslizador_zoom.setFixedWidth(120)
-        self.deslizador_zoom.valueChanged.connect(lambda v: self._poner_zoom(v / 100))
+        self.deslizador_zoom.valueChanged.connect(lambda v: self._poner_zoom(v / 100, animar=False))
         self.l_zoom = CaptionLabel("100 %")
         self.l_zoom.setFixedWidth(40)
         self.l_zoom.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         for b, paso in ((self.b_menos, -0.25), (self.b_mas, 0.25)):
             b.setFixedSize(28, 28)
-            b.clicked.connect(lambda _=False, d=paso: self._poner_zoom(self.zoom + d))
+            b.clicked.connect(lambda _=False, d=paso: self._poner_zoom(self._zoom_meta + d))
         consejo = "Zoom de la vista previa: rueda del mouse sobre el comprobante, arrastrar para moverse, doble clic para ajustar"
         for w in (self.b_menos, self.deslizador_zoom, self.b_mas, self.l_zoom):
             w.setToolTip(consejo)
@@ -867,12 +948,12 @@ class NuevoInterface(QWidget):
         raiz.addWidget(barra)
 
         # ================= Señales =================
-        # Vista en vivo: cada tecla pide la vista casi de inmediato (30 ms juntan los cambios que llegan
-        # a la vez, p. ej. al pegar o limpiar). Si PhotoCraft aún pinta la anterior, la nueva espera su
-        # turno con los datos más recientes; el tope evita que una racha de teclas la posponga.
+        # Vista en vivo: cada tecla pide la vista de inmediato (el temporizador en 0 solo junta los cambios
+        # que llegan a la vez, p. ej. al pegar o limpiar). Si PhotoCraft aún pinta la anterior, la nueva
+        # espera su turno con los datos más recientes; el tope evita que una racha de teclas la posponga.
         self.temporizador = QTimer(self)
         self.temporizador.setSingleShot(True)
-        self.temporizador.setInterval(30)
+        self.temporizador.setInterval(0)
         self.temporizador.timeout.connect(self._render_vista)
         self.tope_vista = QTimer(self)
         self.tope_vista.setSingleShot(True)
@@ -893,6 +974,13 @@ class NuevoInterface(QWidget):
         self._botones_resultado()
         self._mostrar_plantilla()
         self._cambio(programar=False)
+        QTimer.singleShot(600, self._calentar_vista)   # PhotoCraft listo antes de la primera tecla
+
+    def _calentar_vista(self):
+        if self.en_vivo.isChecked() and not self.vista_ocupada and self.vista_ruta is None:
+            # hilo de Python (daemon) y no QThread: si se cierra el programa mientras tanto, no lo traba
+            threading.Thread(target=motor.calentar_vista, daemon=True,
+                             args=(self._datos(para_vista=True), self.cfg, self._lado_vista())).start()
 
     # ================= Bloques y estado =================
     def abrir_bloque(self, bloque):
@@ -1118,7 +1206,9 @@ class NuevoInterface(QWidget):
                  "Así quedará · se actualiza mientras escribes")
         if self.estado.text() != texto:
             self.estado.setText(texto)
-        self._poner_imagen(ruta)
+        hilo = self.vista_trabajo   # una vista a la vez: es el que acaba de avisar
+        propia = hilo is not None and Path(ruta).stem == Path(str(hilo.destino)).stem
+        self._poner_imagen(ruta, hilo.imagen if propia else None)
         if self.vista_pendiente:
             self._render_vista()
         else:
@@ -1147,10 +1237,12 @@ class NuevoInterface(QWidget):
             return self.ultimo
         return self.vista_ruta
 
-    def _poner_imagen(self, ruta):
+    def _poner_imagen(self, ruta, imagen=None):
         # QImage y no QPixmap(ruta): QPixmap guarda en caché por nombre y hora (en segundos) y,
         # con la vista en vivo rápida, podía mostrar la imagen anterior del mismo archivo.
-        self.pix = QPixmap.fromImage(QImage(str(ruta)))
+        # imagen: la vista en vivo ya leída en su hilo (así la ventana no se traba al recibirla).
+        self.pix = QPixmap.fromImage(imagen if imagen is not None and not imagen.isNull() else QImage(str(ruta)))
+        self.lienzo.fuente = self.pix
         self._ajustar_imagen()
 
     def _tam_ajustado(self):
@@ -1168,15 +1260,30 @@ class NuevoInterface(QWidget):
         alto = max(alto, 400) * self.zoom
         return int(max(600, min(alto * self.devicePixelRatioF(), motor.SesionPhotoCraft.LADO_MAX)))
 
+    def _zoom_animandose(self):
+        return self._ani_zoom.state() == QAbstractAnimation.Running
+
     def _ajustar_imagen(self):
         if not getattr(self, "pix", None) or self.pix.isNull() or not self.panel_vista.isVisible():
             return
+        if self._zoom_animandose():   # a mitad del zoom: se dibuja la original; la nítida va al final
+            self.lienzo.update()
+            return
         dpr = self.devicePixelRatioF()          # pantallas Retina / 4K: la imagen se escala a sus píxeles reales
         ancho, alto = self._tam_ajustado()
-        img = self.pix.scaled(int(ancho * self.zoom * dpr), int(alto * self.zoom * dpr), Qt.KeepAspectRatio,
-                              Qt.SmoothTransformation)
-        img.setDevicePixelRatio(dpr)
-        self.lienzo.poner(img)
+        w, h = int(ancho * self.zoom * dpr), int(alto * self.zoom * dpr)
+        self.lienzo.fuente = self.pix
+        if self.zoom > 1.001 and self.pix.height() < h - 1:
+            # ampliada más que la imagen: se dibuja al vuelo (igual de nítida que escalarla antes, sin la
+            # pausa ni una copia enorme en memoria); PhotoCraft manda luego una más grande
+            self.lienzo.escalar(w / dpr, h / dpr)
+        else:
+            if abs(self.pix.height() - h) <= 1 and abs(self.pix.width() - w) <= 2:
+                img = QPixmap(self.pix)   # la vista en vivo ya viene del tamaño justo: escalarla solo la suaviza
+            else:   # más chica que la imagen: se reduce con calidad (al vuelo se vería granulada)
+                img = self.pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            img.setDevicePixelRatio(dpr)
+            self.lienzo.poner(img, fundido=not self.lienzo.escalando)   # tras el zoom: sin fundido
         self.lienzo.setCursor(Qt.OpenHandCursor if self.zoom > 1.001 else Qt.ArrowCursor)
         if self.velo.isVisible():
             self.velo.cubrir()
@@ -1184,44 +1291,77 @@ class NuevoInterface(QWidget):
                 and max(self.pix.width(), self.pix.height()) + 48 < self._lado_vista()):
             self.temporizador.start()   # la ventana creció o hay zoom: pedir la vista más nítida
 
-    def _poner_zoom(self, factor, ancla=None):
+    def _poner_zoom(self, factor, ancla=None, animar=True):
         """Cambia el zoom (1 = ajustado al panel) manteniendo quieto el punto bajo el mouse (ancla, en
-        coordenadas del visor) o el centro de lo que se ve."""
-        factor = round(min(ZOOM_MAX, max(ZOOM_MIN, factor)), 2)
-        if abs(factor - self.zoom) < 0.005:
+        coordenadas del visor) o el centro de lo que se ve. Animado y suave (rueda, botones, doble clic):
+        si llega otro cambio a mitad de camino, sigue desde donde va. El deslizador va directo."""
+        meta = round(min(ZOOM_MAX, max(ZOOM_MIN, factor)), 3)
+        if abs(meta - self._zoom_meta) < 0.001 and abs(meta - self.zoom) < 0.001:
             return
+        self._zoom_meta = meta
         vp = self.area.viewport()
-        ancla = ancla or QPointF(vp.width() / 2, vp.height() / 2)
-        h, v = self.area.horizontalScrollBar(), self.area.verticalScrollBar()
-        lw, lh = max(self.lienzo.width(), 1), max(self.lienzo.height(), 1)
-        px = (ancla.x() - self.lienzo.x()) / lw    # el punto bajo el mouse, en proporción del comprobante
-        py = (ancla.y() - self.lienzo.y()) / lh    # (la posición del lienzo ya incluye el desplazamiento)
-        self.zoom = factor
-        self.deslizador_zoom.blockSignals(True)
-        self.deslizador_zoom.setValue(int(round(factor * 100)))
-        self.deslizador_zoom.blockSignals(False)
-        self.l_zoom.setText(f"{int(round(factor * 100))} %")
-        self._ajustar_imagen()
-        QApplication.processEvents()        # que el área conozca el tamaño nuevo antes de mover las barras
-        h.setValue(int(px * self.lienzo.width() - ancla.x()))
-        v.setValue(int(py * self.lienzo.height() - ancla.y()))
+        ancla = QPointF(ancla) if ancla is not None else QPointF(vp.width() / 2, vp.height() / 2)
+        # el punto bajo el mouse, en proporción de la imagen (la posición del lienzo ya incluye el desplazamiento)
+        m = MARGEN_LIENZO
+        iw, ih = max(self.lienzo.width() - 2 * m, 1), max(self.lienzo.height() - 2 * m, 1)
+        self._zoom_ancla = ancla
+        self._zoom_prop = ((ancla.x() - self.lienzo.x() - m) / iw, (ancla.y() - self.lienzo.y() - m) / ih)
+        self._zoom_calidad.stop()
+        hay_imagen = getattr(self, "pix", None) is not None and not self.pix.isNull()
+        self._ani_zoom.stop()
+        if animar and hay_imagen and estilo.ANIMAR:   # una sola animación, reapuntada (la rueda manda muchas)
+            self._ani_zoom.setStartValue(float(self.zoom))
+            self._ani_zoom.setEndValue(float(meta))
+            self._ani_zoom.start()
+        else:
+            self._zoom_visual(meta)
+            self._zoom_calidad.start()
 
-    def _alternar_zoom(self):
-        """Doble clic (o la prueba de la vista en vivo): ajustado ↔ 200 %."""
-        self._poner_zoom(1.0 if self.zoom > 1.001 else 2.0)
+    def _zoom_visual(self, z):
+        """Un cuadro del zoom: tamaño nuevo y el mismo punto bajo el mouse (barato: sin reescalar)."""
+        self.zoom = z
+        self.deslizador_zoom.blockSignals(True)
+        self.deslizador_zoom.setValue(int(round(z * 100)))
+        self.deslizador_zoom.blockSignals(False)
+        self.l_zoom.setText(f"{int(round(z * 100))} %")
+        if getattr(self, "pix", None) is None or self.pix.isNull():
+            return
+        ancho, alto = self._tam_ajustado()
+        self.lienzo.escalar(ancho * z, alto * z)   # el área ajusta sus barras al instante (sin processEvents)
+        m = MARGEN_LIENZO
+        (px, py), a = self._zoom_prop, self._zoom_ancla
+        self.area.horizontalScrollBar().setValue(round(px * (self.lienzo.width() - 2 * m) + m - a.x()))
+        self.area.verticalScrollBar().setValue(round(py * (self.lienzo.height() - 2 * m) + m - a.y()))
+
+    def _zoom_listo(self):
+        """El zoom llegó (o el deslizador se soltó): la imagen nítida de ese tamaño y, si hace falta, una
+        vista más grande de PhotoCraft."""
+        if self._zoom_animandose():
+            return
+        self.zoom = self._zoom_meta
+        h, v = self.area.horizontalScrollBar().value(), self.area.verticalScrollBar().value()
+        self._ajustar_imagen()
+        self.area.horizontalScrollBar().setValue(h)   # misma posición (el tamaño cambia a lo más 1 px)
+        self.area.verticalScrollBar().setValue(v)
+
+    def _alternar_zoom(self, ancla=None):
+        """Doble clic (en el punto del clic) o la prueba de la vista en vivo: ajustado ↔ 200 %."""
+        self._poner_zoom(1.0 if self._zoom_meta > 1.001 else 2.0, ancla)
 
     def eventFilter(self, obj, e):
         if obj in (self.lienzo, self.area.viewport()):
             t = e.type()
             if t == QEvent.Wheel and getattr(self, "pix", None):      # rueda: zoom hacia el puntero
-                pasos = e.angleDelta().y() / 120
+                pasos = e.angleDelta().y() / 120   # touchpad: fracciones pequeñas, igual de suave
                 if pasos:
                     ancla = self.area.viewport().mapFrom(obj, e.position().toPoint()) if obj is self.lienzo \
                         else e.position().toPoint()
-                    self._poner_zoom(self.zoom * (1.15 ** pasos), QPointF(ancla))
+                    self._poner_zoom(self._zoom_meta * (1.2 ** pasos), QPointF(ancla))
                 return True
             if t == QEvent.MouseButtonDblClick and e.button() == Qt.LeftButton:
-                self._alternar_zoom()
+                ancla = self.area.viewport().mapFrom(obj, e.position().toPoint()) if obj is self.lienzo \
+                    else e.position().toPoint()
+                self._alternar_zoom(QPointF(ancla))
                 return True
             if t == QEvent.MouseButtonPress and e.button() == Qt.LeftButton and self.zoom > 1.001:
                 self._arrastre = (e.globalPosition(), self.area.horizontalScrollBar().value(),

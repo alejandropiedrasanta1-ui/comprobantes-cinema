@@ -126,40 +126,55 @@ class Documento:
 
 
 def _serve():
-    doc = None
+    estado = {"doc": None}
+
+    def atender(metodo, p):
+        doc = estado["doc"]
+        if metodo == "doc.open":
+            estado["doc"] = Documento(p["path"])
+            return {"index": 0, "width": ANCHO, "height": ALTO, "layers": len(ORIGINAL), "name": Path(p["path"]).name}
+        if metodo == "engine.execute":
+            if p["command"] == "type.fonts":
+                return {"families": FUENTES}
+            if not doc:
+                raise RuntimeError("no document open")
+            return doc.ejecutar(p["command"], p.get("params") or {})
+        if metodo == "doc.replaceSmartObject":
+            if not Path(p["path"]).is_file():
+                raise RuntimeError(f"automation read `{p['path']}` failed (NotFound)")
+            return doc.ejecutar("layer.smartObjects.replaceContents", p)
+        if metodo == "doc.render":
+            if p.get("maxSide", 1024) > 2048:
+                raise RuntimeError("automation preview side exceeds 2048 pixels")
+            b = io.BytesIO()
+            doc.pintar(p.get("maxSide", 1024)).save(b, "PNG")
+            return {"base64": base64.b64encode(b.getvalue()).decode(), "mime": "image/png"}
+        if metodo == "doc.save":
+            doc.pintar().save(p["path"], quality=p.get("quality", 92))
+            return {"path": p["path"]}
+        if metodo == "batch":   # como el real: se detiene en el primer paso que falla
+            if "steps" not in p:
+                raise RuntimeError("batch needs `steps`")
+            resultados = []
+            for paso in p["steps"]:
+                try:
+                    resultados.append({"ok": True, "result": atender(paso.get("method"), paso.get("params") or {})})
+                except Exception as e:
+                    resultados.append({"ok": False, "error": str(e)})
+                    break
+            fallos = sum(not r["ok"] for r in resultados)
+            return {"completed": len(resultados) - fallos, "failed": fallos, "results": resultados}
+        if metodo in ("doc.close", "doc.select", "session.list", "methods"):
+            return {}
+        raise RuntimeError(f"método desconocido {metodo}")
+
     for linea in sys.stdin:
         if not linea.strip():
             continue
         pedido = json.loads(linea)
         metodo, p = pedido.get("method"), pedido.get("params") or {}
         try:
-            if metodo == "doc.open":
-                doc = Documento(p["path"])
-                r = {"index": 0, "width": ANCHO, "height": ALTO, "layers": len(ORIGINAL), "name": Path(p["path"]).name}
-            elif metodo == "engine.execute":
-                if p["command"] == "type.fonts":
-                    r = {"families": FUENTES}
-                elif not doc:
-                    raise RuntimeError("no document open")
-                else:
-                    r = doc.ejecutar(p["command"], p.get("params") or {})
-            elif metodo == "doc.replaceSmartObject":
-                if not Path(p["path"]).is_file():
-                    raise RuntimeError(f"automation read `{p['path']}` failed (NotFound)")
-                r = doc.ejecutar("layer.smartObjects.replaceContents", p)
-            elif metodo == "doc.render":
-                if p.get("maxSide", 1024) > 2048:
-                    raise RuntimeError("automation preview side exceeds 2048 pixels")
-                b = io.BytesIO()
-                doc.pintar(p.get("maxSide", 1024)).save(b, "PNG")
-                r = {"base64": base64.b64encode(b.getvalue()).decode(), "mime": "image/png"}
-            elif metodo == "doc.save":
-                doc.pintar().save(p["path"], quality=p.get("quality", 92))
-                r = {"path": p["path"]}
-            elif metodo in ("doc.close", "doc.select", "session.list", "methods"):
-                r = {}
-            else:
-                raise RuntimeError(f"método desconocido {metodo}")
+            r = atender(metodo, p)
             respuesta = {"id": pedido.get("id"), "ok": True, "result": r}
         except Exception as e:
             respuesta = {"id": pedido.get("id"), "ok": False, "error": str(e)}

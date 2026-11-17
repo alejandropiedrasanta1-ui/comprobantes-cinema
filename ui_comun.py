@@ -142,11 +142,15 @@ class Trabajo(QThread):
         super().__init__()
         self.datos, self.cfg, self.destino, self.calidad, self.vista = datos, cfg, destino, calidad, vista
         self.lado = lado
+        self.imagen = None   # vista en vivo: la imagen ya leída (aquí y no en la ventana, que no se traba)
 
     def run(self):
         try:
             if self.vista:  # vista en vivo: PhotoCraft queda abierto entre un cambio y otro
                 ruta = motor.generar_vista(self.datos, self.cfg, self.destino, self.calidad or 80, self.lado)
+                img = QImage(str(ruta))
+                if not img.isNull():   # el comprobante es opaco: RGB32 se dibuja sin mezclar
+                    self.imagen = img.convertToFormat(QImage.Format_RGB32)
             else:
                 ruta = motor.generar(self.datos, self.cfg, self.destino, self.calidad)
             self.listo.emit(str(ruta))
