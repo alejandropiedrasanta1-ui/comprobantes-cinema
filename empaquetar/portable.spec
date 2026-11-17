@@ -17,7 +17,8 @@ datas = [
 if any((RAIZ / "recursos" / "fuentes").glob("*.*")):
     datas.append((str(RAIZ / "recursos" / "fuentes"), "recursos/fuentes"))
 datas += [(str(p), "PLANTILLAS") for p in sorted((RAIZ / "PLANTILLAS").glob("*.psd"))]
-datas += [(str(p), "PLANTILLAS") for p in sorted((RAIZ / "PLANTILLAS").glob("VISTA PREVIA - *.jpg"))]
+datas += [(str(p), "PLANTILLAS") for p in sorted((RAIZ / "PLANTILLAS").glob("*.json"))]   # medidas de la lista
+datas += [(str(p), "PLANTILLAS") for p in sorted((RAIZ / "PLANTILLAS").glob("VISTA PREVIA*.jpg"))]
 
 a = Analysis(
     [str(RAIZ / "generador.py")],

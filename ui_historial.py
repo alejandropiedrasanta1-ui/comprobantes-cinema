@@ -772,6 +772,8 @@ class HistorialInterface(QWidget):
                           fecha_evento=c.fecha_evento, fecha_comprobante=self.fecha.getDate().toPython(),
                           contacto=c.telefono, total=c.total, monto=monto, saldo=saldo,
                           concepto="PAGO FINAL" if saldo <= 0 else "ABONO", captura=self.zona.ruta)
+        if c.servicios:   # los mismos servicios (y extras) de su primer comprobante
+            self.datos["servicios"] = c.servicios
         self.b_abono.setEnabled(False)
         self.b_abono.setText("Generando…")
         self.ring.show()

@@ -15,8 +15,9 @@ import time
 from datetime import date
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 
+import lista
 import rutas
 
 MESES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO",
@@ -80,8 +81,75 @@ def guardar_preferencia(clave, valor):
     CONFIG_USUARIO.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def ruta_plantilla(paquete):
-    return str(rutas.recurso(paquete["plantilla"]))
+def ruta_plantilla(cfg):
+    """La plantilla única del comprobante (la lista de servicios se dibuja en cada comprobante)."""
+    return str(rutas.recurso(cfg.get("plantilla") or "PLANTILLAS/COMPROBANTE.psd"))
+
+
+def servicios(cfg, datos):
+    """Servicios que van en el comprobante: los indicados en datos["servicios"] (el paquete con sus
+    cambios y los extras del cliente) o, si no vienen, los del paquete."""
+    return [list(s) for s in (datos.get("servicios") or cfg["paquetes"][datos["paquete"]].get("incluye", []))]
+
+
+def item_extra(extra, opcion):
+    """Renglón de la lista para un extra con la opción elegida: [título, (opción), ícono]."""
+    return [extra["titulo"], f"({extra['opciones'][opcion][0]})", extra["icono"]]
+
+
+def precio_extra(extra, opcion):
+    return float(extra["opciones"][opcion][1])
+
+
+def precio_item(cfg, item):
+    """Precio de un renglón si es un extra del catálogo con una de sus opciones (0 si no lo es)."""
+    for extra in cfg.get("extras", []):
+        for i in range(len(extra["opciones"])):
+            if list(item[:2]) == item_extra(extra, i)[:2]:
+                return precio_extra(extra, i)
+    return 0.0
+
+
+def con_extras(incluye, extras):
+    """La lista del paquete con los extras del cliente: van antes de «Memoria USB y link» (la entrega
+    queda al final, como en los paquetes)."""
+    incluye, extras = [list(i) for i in incluye], [list(e) for e in extras]
+    if incluye and incluye[-1][2] == "usb":
+        return incluye[:-1] + extras + incluye[-1:]
+    return incluye + extras
+
+
+def config_por_defecto():
+    """config_default.json tal cual (sin las preferencias del usuario): para «Restablecer»."""
+    with open(rutas.recurso("config_default.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+_cache_meta = {}
+
+
+def _meta_plantilla(plantilla):
+    """Datos que crear_plantillas guarda junto a la plantilla (medidas de la lista y de cada ícono)."""
+    archivo = Path(plantilla).with_suffix(".json")
+    st = archivo.stat()
+    clave = (str(archivo), st.st_mtime, st.st_size)
+    if clave not in _cache_meta:
+        _cache_meta[clave] = json.loads(archivo.read_text(encoding="utf-8"))
+    return _cache_meta[clave]
+
+
+_cache_lista = {}
+
+
+def _comandos_lista(cfg, plantilla, capas, items, medir):
+    """Comandos que escriben la lista en la plantilla (medida una sola vez por lista: en la vista en vivo
+    no se vuelve a medir en cada tecla y el comprobante final reutiliza lo de la vista)."""
+    st = os.stat(plantilla)
+    clave = (plantilla, st.st_mtime, st.st_size, lista.clave(items))
+    if clave not in _cache_lista:
+        cmds, _ = lista.comandos(capas, _meta_plantilla(plantilla), items, medir, tempfile.gettempdir())
+        _cache_lista[clave] = cmds
+    return clave[3], _cache_lista[clave]
 
 
 def quetzales(valor):
@@ -150,10 +218,14 @@ def _capas(cfg, plantilla):
 
 def _localizar(capas):
     """Ubica las capas a editar por su contenido, así funciona aunque se edite el PSD."""
-    loc = {"saldo": [], "icono_boda": None, "icono_xv": None, "captura": None}
+    loc = {"saldo": [], "icono_boda": None, "icono_xv": None, "captura": None,
+           "reserva_monto": None, "saldo_monto": None, "raya_saldo": None}
+    por_nombre = {"RESERVA - MONTO": "reserva_monto", "SALDO - MONTO": "saldo_monto", "RAYA - SALDO": "raya_saldo"}
     for l in capas:
         nombre = l.get("name", "")
-        if l.get("kind") == "Type":
+        if nombre.upper() in por_nombre:   # diseño «Tarjetas suaves»: el monto va en su propia capa
+            loc[por_nombre[nombre.upper()]] = l["id"]
+        elif l.get("kind") == "Type":
             t = ((l.get("text") or {}).get("text") or "").strip()
             tu = t.upper()
             if tu.startswith("FECHA"):
@@ -172,9 +244,10 @@ def _localizar(capas):
             loc["icono_boda"] = l["id"]
         elif "ICONO DE XV" in nombre.upper():
             loc["icono_xv"] = l["id"]
-        elif l.get("kind") == "Smart Object" and l.get("visible") and l.get("bounds"):
+        elif (l.get("kind") == "Smart Object" and l.get("visible") and l.get("bounds")
+              and not nombre.upper().startswith(("MARCO", "TARJETAS"))):
             x, y, w, h = l["bounds"]
-            if x > 1400 and w > 500 and h > 800 and 1500 < y < 2000:
+            if x > 1400 and w > 400 and h > 800 and 1500 < y < 2000:   # marco con forma de celular
                 loc["captura"] = l
     faltan = [k for k in ("fecha", "tema", "nombre_lugar", "contacto", "reserva", "captura")
               if not loc.get(k)]
@@ -185,7 +258,10 @@ def _localizar(capas):
 
 # Borde derecho máximo (px) de los textos que pueden crecer: así no se salen de la hoja
 # ni chocan con el dron.
-LIMITE_DERECHO = {"tema": 2340, "nombre_lugar": 2340, "contacto": 1950}
+LIMITE_DERECHO = {"tema": 2330, "nombre_lugar": 2330, "contacto": 1930,   # tema: hasta el borde de las
+                  "fecha": 1175}                     # tarjetas; fecha y contacto: dentro de su ficha
+# Centro (px) de la tarjeta de pago: ahí va «PAGO COMPLETADO» cuando ya no hay saldo (sin monto ni raya)
+CENTRO_PAGO_X = 1185
 
 
 _cache_fuentes = None
@@ -244,12 +320,17 @@ def _medir_cli(cfg, plantilla, cmds):
             for linea in _cli(cfg, "run", plantilla, *_argumentos(cmds)).splitlines() if linea.startswith("{")]
 
 
-def _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos, medir=None):
+def _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos, medir=None, centros=None):
     """Mide los textos que cambian. Devuelve ({capa: estilo} para los que no caben,
-    {capa: dx} para mantener la alineación del diseño: reserva a la derecha, saldo centrado).
+    {capa: dx} para mantener la alineación del diseño: montos de la tarjeta de pago centrados donde
+    están en la plantilla, etiquetas a la izquierda, o centradas en centros[capa] (px) si se indica).
     medir(cmds) → resultados; sin él se abre la plantilla con «photocraft-cli run»."""
+    centros = centros or {}
     ids = {loc[k]: k for k in LIMITE_DERECHO}
-    alinear = {loc["reserva"]: "derecha", **{s: "centro" for s in loc["saldo"]}}
+    if loc["reserva_monto"]:   # etiquetas a la izquierda (tras su ícono) y montos centrados en su columna
+        alinear = {c: "centro" for c in (loc["reserva_monto"], loc["saldo_monto"], *centros) if c in textos}
+    else:
+        alinear = {c: "centro" for c in (loc["reserva"], *loc["saldo"]) if c in textos}
     cmds = []
     for capa in [*ids, *alinear]:
         cmds.append(("type.edit", {"layer": capa, "text": textos[capa]}))
@@ -267,7 +348,7 @@ def _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos, medir=None):
         if capa in cajas and original.get(capa):
             x0, _, x1, _ = cajas[capa]
             ox, _, ow, _ = original[capa]
-            dx = (ox + ow) - x1 if modo == "derecha" else (ox + ow / 2) - (x0 + x1) / 2
+            dx = (ox + ow) - x1 if modo == "derecha" else centros.get(capa, ox + ow / 2) - (x0 + x1) / 2
             if abs(dx) >= 2:
                 movimientos[capa] = round(dx, 1)
     ajustes = {}
@@ -292,18 +373,39 @@ def _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos, medir=None):
     return ajustes, movimientos
 
 
+def _recortar_bordes(im, tolerancia=18):
+    """Quita los bordes lisos alrededor de la imagen (barras negras, márgenes blancos de una foto
+    recortada): así la captura aprovecha todo el marco. Solo recorta si queda la mayor parte."""
+    fondo = Image.new("RGB", im.size, im.getpixel((0, 0)))
+    caja = ImageChops.difference(im, fondo).convert("L").point(lambda v: 255 if v > tolerancia else 0).getbbox()
+    if caja and (caja[2] - caja[0]) * (caja[3] - caja[1]) >= 0.5 * im.width * im.height:
+        return im.crop(caja)
+    return im
+
+
 def _preparar_captura(ruta, ancho_marco, alto_marco, destino):
-    """Encaja la captura en la proporción del marco con fondo blanco (sin deformarla)."""
-    im = ImageOps.exif_transpose(Image.open(ruta)).convert("RGB")
-    im.thumbnail((1600, 2400))
-    prop = ancho_marco / alto_marco
-    if im.width / im.height < prop:
-        W, H = round(im.height * prop), im.height
-    else:
-        W, H = im.width, round(im.width / prop)
-    lienzo = Image.new("RGB", (W, H), "white")
-    lienzo.paste(im, ((W - im.width) // 2, (H - im.height) // 2))
-    lienzo.save(destino)
+    """Llena todo el marco con la captura, sin deformarla y sin bandas vacías:
+    - si su forma se parece a la del marco (±15 %: las capturas de celular, el marco tiene su forma), la
+      recorta apenas para cubrirlo (se pierden la barra de estado y la de abajo);
+    - si no (p. ej. la captura alta de un celular), va completa al centro, a todo lo alto o ancho,
+      sobre una copia ampliada, desenfocada y oscurecida de sí misma que cubre el resto del marco."""
+    im = _recortar_bordes(ImageOps.exif_transpose(Image.open(ruta)).convert("RGB"))
+    W, H = round(ancho_marco * 2), round(alto_marco * 2)     # el doble del marco: nítida al imprimir
+    prop, prop_im = W / H, im.width / im.height
+    if abs(prop_im / prop - 1) <= 0.15:
+        ImageOps.fit(im, (W, H), Image.LANCZOS, centering=(0.5, 0.4)).save(destino)
+        return
+    fondo = ImageOps.fit(im, (W // 4, H // 4), Image.LANCZOS)
+    fondo = fondo.filter(ImageFilter.GaussianBlur(W / 60)).resize((W, H), Image.LANCZOS)
+    fondo = ImageEnhance.Brightness(ImageEnhance.Color(fondo).enhance(0.7)).enhance(0.55)
+    k = min(W / im.width, H / im.height)
+    frente = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
+    x, y = (W - frente.width) // 2, (H - frente.height) // 2
+    sombra = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(sombra).rectangle((x, y, x + frente.width, y + frente.height), fill=150)
+    fondo = Image.composite(Image.new("RGB", (W, H)), fondo, sombra.filter(ImageFilter.GaussianBlur(W / 70)))
+    fondo.paste(frente, (x, y))
+    fondo.save(destino)
 
 
 def _nombre_archivo(carpeta, base):
@@ -336,14 +438,14 @@ def _captura_vista(ruta, ancho_marco, alto_marco):
 def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None):
     """datos: evento, paquete, festejado, lugar, fecha_evento (date), fecha_comprobante (date),
     contacto, total, monto (o reserva), captura (ruta de imagen).
-    Opcionales: concepto ("RESERVA CON", "ABONO", "PAGO FINAL") y saldo (lo que falta después
-    de este pago; si no se da, total - monto). Devuelve la ruta del JPG.
+    Opcionales: concepto ("RESERVA CON", "ABONO", "PAGO FINAL"), saldo (lo que falta después
+    de este pago; si no se da, total - monto) y servicios ([[título, detalle, ícono], …]: el paquete
+    con sus cambios y los extras; si no se da, los del paquete). Devuelve la ruta del JPG.
     sesion: SesionPhotoCraft ya abierta (vista en vivo); sin ella se usa «photocraft-cli run».
     lado: con sesión, la vista se pinta en memoria con ese lado mayor (px, hasta 2048) y se guarda
     como PNG junto a destino, en vez de exportar el JPG completo."""
     cfg = cfg or cargar_config()
-    paquete = cfg["paquetes"][datos["paquete"]]
-    plantilla = ruta_plantilla(paquete)
+    plantilla = ruta_plantilla(cfg)
     if not os.path.isfile(plantilla):
         raise RuntimeError(f"No se encontró la plantilla:\n{plantilla}")
     capas = _capas(cfg, plantilla)
@@ -358,17 +460,33 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None)
 
     textos = {
         loc["fecha"]: f"FECHA: {fc.day}/{fc.month:02d}/{fc.year}",
-        loc["tema"]: f"{evento}({datos['paquete']}) - {fe.day} DE {MESES[fe.month - 1]}",
+        loc["tema"]: f"{evento} ({datos['paquete']}) - {fe.day} DE {MESES[fe.month - 1]}",
         loc["nombre_lugar"]: f"{datos['festejado'].strip()} | {datos['lugar'].strip()}",
         loc["contacto"]: datos["contacto"].strip(),
-        loc["reserva"]: f"{concepto}: {quetzales(monto)}",
     }
+    completo = saldo <= 0
+    centros = {}
+    if loc["reserva_monto"]:   # «RESERVA CON:  |  Q600»: etiqueta y monto en capas separadas
+        textos[loc["reserva"]] = f"{concepto}:"
+        textos[loc["reserva_monto"]] = quetzales(monto)
+    else:
+        textos[loc["reserva"]] = f"{concepto}: {quetzales(monto)}"
     for capa in loc["saldo"]:
-        textos[capa] = "PAGO COMPLETADO" if saldo <= 0 else f"SALDO PENDIENTE: {quetzales(saldo)}"
+        if completo:
+            textos[capa] = "PAGO COMPLETADO"
+            if loc["saldo_monto"]:    # sin monto ni raya: centrado en toda la fila
+                centros[capa] = CENTRO_PAGO_X
+        elif loc["saldo_monto"]:
+            textos[capa] = "SALDO PENDIENTE:"
+            textos[loc["saldo_monto"]] = quetzales(saldo)
+        else:
+            textos[capa] = f"SALDO PENDIENTE: {quetzales(saldo)}"
 
     if sesion:
         sesion.abrir(plantilla)
     estilos = _estilos_sustitutos(cfg, capas, textos, sesion)
+    clave_lista, cmds_lista = _comandos_lista(cfg, plantilla, capas, servicios(cfg, datos),
+                                              sesion.medir if sesion else (lambda c: _medir_cli(cfg, plantilla, c)))
 
     x, y, w, h = loc["captura"]["bounds"]
     tmp = clave_captura = None
@@ -383,11 +501,11 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None)
         cid = loc["captura"]["id"]
         cmds_captura = [("layer.smartObjects.replaceContents", {"layer": cid, "path": str(tmp)}),
                         ("edit.transform", {"layer": cid, "quad": [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]})]
-    if sesion:   # la captura queda en la instantánea base: no se vuelve a colocar en cada tecla
-        sesion.poner_captura(clave_captura, cmds_captura)
+    if sesion:   # captura y lista quedan en la instantánea base: no se vuelven a poner en cada tecla
+        sesion.poner_base((clave_captura, clave_lista), cmds_captura + cmds_lista)
 
     ajustes, movimientos = _ajustar_tamanos(cfg, plantilla, capas, loc, textos, estilos,
-                                            sesion.medir if sesion else None)
+                                            sesion.medir if sesion else None, centros)
     for capa, ajuste in ajustes.items():
         estilos.setdefault(capa, {}).update(ajuste)
 
@@ -407,6 +525,9 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None)
         cmd("layer.setProps", {"layer": loc["icono_boda"], "visible": not es_xv})
     if loc["icono_xv"]:
         cmd("layer.setProps", {"layer": loc["icono_xv"], "visible": es_xv})
+    for clave in ("saldo_monto", "raya_saldo"):
+        if loc[clave]:
+            cmd("layer.setProps", {"layer": loc[clave], "visible": not completo})
 
     if destino:  # vista previa: archivo temporal indicado, se sobrescribe
         destino = Path(destino)
@@ -428,7 +549,7 @@ def generar(datos, cfg=None, destino=None, calidad=None, sesion=None, lado=None)
     else:
         try:
             # Sin metadatos: el XMP de los PSD puede traer textos viejos de las capas (datos de otros clientes)
-            _cli(cfg, "run", plantilla, *_argumentos(cmds + cmds_captura),
+            _cli(cfg, "run", plantilla, *_argumentos(cmds_lista + cmds_captura + cmds),
                  "--out", str(destino), "--quality", str(calidad), "--metadata", "none")
         finally:
             if tmp:
@@ -542,8 +663,9 @@ class SesionPhotoCraft:
         base = self._ejecutar("history.newSnapshot", {"name": "base"})["snapshot"]
         self.doc = dict(plantilla=plantilla, clave=clave, base0=base, base=base, captura=None)
 
-    def poner_captura(self, clave, cmds):
-        """Deja la captura del pago (o el recuadro de ejemplo) en la instantánea base del documento."""
+    def poner_base(self, clave, cmds):
+        """Deja la captura del pago (o el recuadro de ejemplo) y la lista de servicios en la instantánea
+        base del documento: solo se rehace cuando cambia alguna de las dos."""
         d = self.doc
         if d["captura"] == clave:
             return

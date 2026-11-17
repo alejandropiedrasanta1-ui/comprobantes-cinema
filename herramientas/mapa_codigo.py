@@ -140,7 +140,7 @@ def generar():
             linea += " · " + " · ".join(partes)
         out.append(linea)
     binarios = {
-        "PLANTILLAS": "los 4 PSD editables (COMPROBANTE - <PAQUETE>.psd) y su VISTA PREVIA - <PAQUETE>.jpg",
+        "PLANTILLAS": "la plantilla única COMPROBANTE.psd (la lista de servicios la dibuja lista.py en cada comprobante), sus medidas COMPROBANTE.json y la VISTA PREVIA.jpg; se rehacen con crear_plantillas.py",
         "recursos": "icono.svg/.png/.ico/.icns y fuentes/ (no se sube: licencia)",
         "DISEÑOS ORIGINALES": "PSD originales y COTIZACIONES del estudio (fuera de git; NO leer)",
         "COMPROBANTES GENERADOS": "JPG generados (fuera de git; NO leer)",

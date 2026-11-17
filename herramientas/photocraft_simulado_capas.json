@@ -3,63 +3,92 @@
 "height": 3508,
 "layers": [
 {
-"id": 72,
+"id": 99,
 "name": "ICONO DE BODA",
 "kind": "Smart Object",
 "visible": true,
 "bounds": [
-438,
-1223,
-193,
-300
+343,
+1211,
+196,
+303
 ]
 },
 {
-"id": 70,
+"id": 97,
 "name": "ICONO DE XV AÑOS",
 "kind": "Smart Object",
 "visible": false,
 "bounds": [
-381,
-1209,
 286,
-290
+1198,
+289,
+291
 ]
 },
 {
-"id": 68,
-"name": "SALDO PENDIENTE: Q900",
+"id": 95,
+"name": "SALDO - MONTO",
 "kind": "Type",
 "visible": true,
 "bounds": [
-808,
-3217,
-1033,
-73
+1545,
+3301,
+311,
+76
 ],
 "text": {
-"text": "SALDO PENDIENTE: Q900",
+"text": "Q2,900",
 "font": "LEMON MILK",
 "sizePt": 18.0
 }
 },
 {
-"id": 67,
+"id": 94,
+"name": "SALDO PENDIENTE:",
+"kind": "Type",
+"visible": true,
+"bounds": [
+480,
+3308,
+774,
+63
+],
+"text": {
+"text": "SALDO PENDIENTE:",
+"font": "LEMON MILK",
+"sizePt": 18.0
+}
+},
+{
+"id": 93,
 "name": "Rectángulo 2",
 "kind": "Smart Object",
 "visible": true,
 "bounds": [
-1716,
-1731,
-635,
-981
+1790,
+1752,
+495,
+970
 ]
 },
 {
-"id": 65,
+"id": 91,
+"name": "MARCO - CAPTURA",
+"kind": "Pixel",
+"visible": true,
+"bounds": [
+0,
+0,
+2480,
+3508
+]
+},
+{
+"id": 90,
 "name": "Forma 8 copia",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 1892,
 1738,
@@ -68,10 +97,10 @@
 ]
 },
 {
-"id": 64,
+"id": 89,
 "name": "Forma 8",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 569,
 1738,
@@ -80,7 +109,7 @@
 ]
 },
 {
-"id": 63,
+"id": 88,
 "name": "Grupo 1 copia",
 "kind": "Smart Object",
 "visible": true,
@@ -92,7 +121,7 @@
 ]
 },
 {
-"id": 61,
+"id": 86,
 "name": "Relleno de color 1",
 "kind": "Smart Object",
 "visible": true,
@@ -104,32 +133,32 @@
 ]
 },
 {
-"id": 59,
-"name": "Forma 7",
+"id": 84,
+"name": "ICONO - video_fotos",
 "kind": "Shape",
 "visible": true,
 "bounds": [
-457,
-2036,
-78,
-66
+388,
+2437,
+82,
+70
 ]
 },
 {
-"id": 58,
-"name": "Forma 6",
+"id": 83,
+"name": "ICONO - video",
 "kind": "Shape",
-"visible": false,
+"visible": true,
 "bounds": [
-456,
-1908,
-79,
-55
+388,
+2120,
+82,
+57
 ]
 },
 {
-"id": 57,
-"name": "Forma 5",
+"id": 82,
+"name": "ICONO - cabina360",
 "kind": "Shape",
 "visible": false,
 "bounds": [
@@ -140,31 +169,31 @@
 ]
 },
 {
-"id": 56,
-"name": "Forma 4",
+"id": 81,
+"name": "ICONO - album",
 "kind": "Shape",
-"visible": false,
+"visible": true,
 "bounds": [
-457,
-2332,
-86,
-56
+383,
+2008,
+91,
+59
 ]
 },
 {
-"id": 55,
-"name": "Forma 3",
+"id": 80,
+"name": "ICONO - dron",
 "kind": "Shape",
-"visible": false,
+"visible": true,
 "bounds": [
-441,
-2304,
-109,
-52
+372,
+2325,
+114,
+55
 ]
 },
 {
-"id": 54,
+"id": 79,
 "name": "Camera",
 "kind": "Pixel",
 "visible": true,
@@ -176,7 +205,7 @@
 ]
 },
 {
-"id": 53,
+"id": 78,
 "name": "descarga (85)",
 "kind": "Smart Object",
 "visible": true,
@@ -188,7 +217,7 @@
 ]
 },
 {
-"id": 51,
+"id": 76,
 "name": "Image",
 "kind": "Smart Object",
 "visible": true,
@@ -200,7 +229,7 @@
 ]
 },
 {
-"id": 49,
+"id": 74,
 "name": "Forma 2",
 "kind": "Shape",
 "visible": false,
@@ -212,34 +241,34 @@
 ]
 },
 {
-"id": 48,
-"name": "Forma 1",
+"id": 73,
+"name": "ICONO - camara",
 "kind": "Shape",
 "visible": true,
 "bounds": [
-363,
-1771,
-168,
-58
+341,
+1786,
+176,
+61
 ]
 },
 {
-"id": 47,
+"id": 72,
 "name": "Text",
 "kind": "Group",
 "visible": true,
 "bounds": null,
 "children": [
 {
-"id": 46,
+"id": 71,
 "name": "3657-3658",
 "kind": "Type",
 "visible": true,
 "bounds": [
-2073,
-513,
-326,
-48
+1943,
+512,
+329,
+51
 ],
 "text": {
 "text": "3657-3658",
@@ -248,15 +277,15 @@
 }
 },
 {
-"id": 45,
+"id": 70,
 "name": "GUATEMALA",
 "kind": "Type",
 "visible": true,
 "bounds": [
-1476,
-520,
-344,
-41
+1345,
+519,
+348,
+44
 ],
 "text": {
 "text": "GUATEMALA",
@@ -265,36 +294,53 @@
 }
 },
 {
-"id": 44,
-"name": "RESERVA CON: Q600",
+"id": 69,
+"name": "RESERVA - MONTO",
 "kind": "Type",
 "visible": true,
 "bounds": [
-1529,
-2750,
-760,
+1597,
+2852,
+205,
 65
 ],
 "text": {
-"text": "RESERVA CON: Q600",
+"text": "Q600",
 "font": "LEMON MILK",
 "sizePt": 15.99999713897705
 }
 },
 {
-"id": 43,
+"id": 68,
+"name": "RESERVA CON:",
+"kind": "Type",
+"visible": true,
+"bounds": [
+480,
+2857,
+523,
+56
+],
+"text": {
+"text": "RESERVA CON:",
+"font": "LEMON MILK",
+"sizePt": 15.99999713897705
+}
+},
+{
+"id": 67,
 "name": "BLANCO",
 "kind": "Smart Object",
 "visible": true,
 "bounds": [
-1313,
+1379,
 198,
-950,
+952,
 125
 ]
 },
 {
-"id": 41,
+"id": 65,
 "name": "R",
 "kind": "Smart Object",
 "visible": false,
@@ -306,61 +352,78 @@
 ]
 },
 {
-"id": 39,
-"name": "Descripción                                                    ",
+"id": 63,
+"name": "TITULO - COMPROBANTE",
 "kind": "Type",
 "visible": true,
 "bounds": [
-351,
-1634,
-1921,
-54
+1815,
+1645,
+445,
+44
 ],
 "text": {
-"text": "Descripción\t\t          \t\t\t\t\t\t\t\t                                       comprobante",
+"text": "comprobante",
 "font": "LEMON MILK",
 "sizePt": 13.07921028137207
 }
 },
 {
-"id": 38,
+"id": 62,
+"name": "Descripción                                                    ",
+"kind": "Type",
+"visible": true,
+"bounds": [
+345,
+1634,
+383,
+55
+],
+"text": {
+"text": "Descripción",
+"font": "LEMON MILK",
+"sizePt": 13.07921028137207
+}
+},
+{
+"id": 61,
 "name": "+502 0000 0000",
 "kind": "Type",
 "visible": true,
 "bounds": [
-1413,
-1081,
-530,
-51
+1440,
+1048,
+466,
+45
 ],
 "text": {
 "text": "+502 0000 0000",
 "font": "Myriad Pro",
-"sizePt": 16.192087173461914
+"sizePt": 14.248998641967773
 }
 },
 {
-"id": 37,
+"id": 60,
 "name": "cONTACTO :",
 "kind": "Type",
 "visible": true,
 "bounds": [
-1418,
-1000,
-503,
-62
+1440,
+967,
+443,
+56
 ],
 "text": {
 "text": "cONTACTO :",
 "font": "LEMON MILK",
-"sizePt": 16.192087173461914
+"sizePt": 14.248998641967773
 }
 },
 {
-"id": 36,
+"id": 59,
 "name": "comprobante",
 "kind": "Type",
-"visible": true,
+"visible": false,
 "bounds": [
 93,
 603,
@@ -374,13 +437,13 @@
 }
 },
 {
-"id": 35,
+"id": 58,
 "name": "Nombre del festejado | Lugar",
 "kind": "Type",
 "visible": true,
 "bounds": [
-714,
-1442,
+615,
+1432,
 749,
 59
 ],
@@ -391,32 +454,32 @@
 }
 },
 {
-"id": 34,
-"name": "BODA(ESENCIAL) - 1 DE ENERO",
+"id": 57,
+"name": "BODA (COMPLETO) - 1 DE ENERO",
 "kind": "Type",
 "visible": true,
 "bounds": [
-708,
-1350,
-1356,
+615,
+1340,
+1438,
 82
 ],
 "text": {
-"text": "BODA(ESENCIAL) - 1 DE ENERO",
+"text": "BODA (COMPLETO) - 1 DE ENERO",
 "font": "Myriad Pro",
 "sizePt": 6.399641036987305
 }
 },
 {
-"id": 33,
+"id": 56,
 "name": "TEMA",
 "kind": "Type",
 "visible": true,
 "bounds": [
-711,
-1264,
+615,
+1254,
 141,
-37
+38
 ],
 "text": {
 "text": "TEMA",
@@ -425,34 +488,34 @@
 }
 },
 {
-"id": 32,
+"id": 55,
 "name": "FECHA: 23/10/2026 ",
 "kind": "Type",
 "visible": true,
 "bounds": [
-350,
-998,
-724,
-69
+500,
+1001,
+616,
+58
 ],
 "text": {
 "text": "FECHA: 1/01/2026",
 "font": "LEMON MILK",
-"sizePt": 11.64134407043457
+"sizePt": 9.895098686218262
 }
 }
 ]
 },
 {
-"id": 31,
+"id": 54,
 "name": "pago exitoso",
 "kind": "Type",
 "visible": true,
 "bounds": [
-698,
-2987,
-1230,
-125
+569,
+3049,
+1232,
+126
 ],
 "text": {
 "text": "pago exitoso",
@@ -461,10 +524,10 @@
 }
 },
 {
-"id": 30,
+"id": 53,
 "name": "Rectángulo 1",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 348,
 2875,
@@ -473,50 +536,50 @@
 ]
 },
 {
-"id": 29,
+"id": 52,
 "name": "Social Media",
 "kind": "Group",
 "visible": true,
 "bounds": null,
 "children": [
 {
-"id": 28,
+"id": 51,
 "name": "Shape",
 "kind": "Shape",
 "visible": true,
 "bounds": [
-1337,
-496,
-97,
-97
+1209,
+497,
+95,
+95
 ]
 },
 {
-"id": 27,
+"id": 50,
 "name": "Shape",
 "kind": "Shape",
 "visible": true,
 "bounds": [
-1949,
-500,
-88,
-89
+1821,
+501,
+86,
+86
 ]
 }
 ]
 },
 {
-"id": 26,
+"id": 49,
 "name": "Design",
 "kind": "Group",
 "visible": true,
 "bounds": null,
 "children": [
 {
-"id": 25,
+"id": 48,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 477,
 3411,
@@ -525,10 +588,10 @@
 ]
 },
 {
-"id": 24,
+"id": 47,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 -194,
 3276,
@@ -537,7 +600,7 @@
 ]
 },
 {
-"id": 23,
+"id": 46,
 "name": "Shape",
 "kind": "Shape",
 "visible": true,
@@ -549,10 +612,10 @@
 ]
 },
 {
-"id": 22,
+"id": 45,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 344,
 2733,
@@ -561,10 +624,10 @@
 ]
 },
 {
-"id": 21,
+"id": 44,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 2155,
 2939,
@@ -573,10 +636,10 @@
 ]
 },
 {
-"id": 20,
+"id": 43,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 344,
 1713,
@@ -585,10 +648,10 @@
 ]
 },
 {
-"id": 19,
+"id": 42,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 64,
 797,
@@ -597,10 +660,10 @@
 ]
 },
 {
-"id": 18,
+"id": 41,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 1874,
 380,
@@ -609,10 +672,10 @@
 ]
 },
 {
-"id": 17,
+"id": 40,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 -133,
 -130,
@@ -621,10 +684,10 @@
 ]
 },
 {
-"id": 16,
+"id": 39,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 1239,
 419,
@@ -633,10 +696,10 @@
 ]
 },
 {
-"id": 15,
+"id": 38,
 "name": "Shape",
 "kind": "Shape",
-"visible": true,
+"visible": false,
 "bounds": [
 0,
 -1,
@@ -647,44 +710,152 @@
 ]
 },
 {
-"id": 14,
+"id": 37,
 "name": "Background",
 "kind": "Group",
 "visible": true,
 "bounds": null,
 "children": [
 {
-"id": 13,
+"id": 36,
 "name": "ICONO - galeria",
 "kind": "Smart Object",
-"visible": true,
+"visible": false,
 "bounds": [
-434,
-2198,
+370,
+2179,
 119,
 42
 ]
 },
 {
-"id": 11,
+"id": 34,
+"name": "ICONO - buzon",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+392,
+2560,
+75,
+67
+]
+},
+{
+"id": 32,
+"name": "ICONO - enmarcada",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+398,
+2168,
+63,
+64
+]
+},
+{
+"id": 30,
+"name": "ICONO - video_largo",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+397,
+2226,
+63,
+69
+]
+},
+{
+"id": 28,
+"name": "ICONO - cabina_fotos",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+386,
+2159,
+87,
+82
+]
+},
+{
+"id": 26,
+"name": "ICONO - zancos",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+406,
+2159,
+45,
+82
+]
+},
+{
+"id": 24,
+"name": "ICONO - telefono",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+383,
+2159,
+92,
+82
+]
+},
+{
+"id": 22,
+"name": "ICONO - espejo",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+406,
+2159,
+45,
+82
+]
+},
+{
+"id": 20,
+"name": "ICONO - backdrop",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+392,
+2159,
+73,
+82
+]
+},
+{
+"id": 18,
+"name": "ICONO - cabezones",
+"kind": "Smart Object",
+"visible": false,
+"bounds": [
+400,
+2159,
+58,
+82
+]
+},
+{
+"id": 16,
 "name": "LISTA DEL PAQUETE",
 "kind": "Type",
 "visible": true,
 "bounds": [
-620,
-1729,
-832,
-543
+601,
+1757,
+834,
+968
 ],
 "text": {
-"text": "\nFotos ilimitadas\n(Sin límite de horas)\n\nCobertura en\n(Ceremonia - fiesta)\n\nVideo con fotos\n(Fotos del evento)\n\nGalería online\n(Link con las fotos)",
+"text": "\nFotos ilimitadas\n(Sin límite de horas)\n\nCobertura en\n(Maquillaje - ceremonia - fiesta)\n\nÁlbum de fotos\n(12 páginas)\n\nVideo profesional\n(Tráiler para redes sociales)\n\nVideo largo\n(30 min - 45 min de video)\n\nVideo con dron\n(Según condiciones del lugar)\n\nVideo con fotos\n(Fotos del evento)\n\nBuzón de audios\n(Mensajes de tus invitados)\n\nMemoria USB y link",
 "font": "LEMON MILK",
-"sizePt": 8.000000953674316
+"sizePt": 6.674699783325195
 }
 },
 {
-"id": 10,
-"name": "108980",
+"id": 15,
+"name": "ICONO - chispa",
 "kind": "Smart Object",
 "visible": false,
 "bounds": [
@@ -695,27 +866,75 @@
 ]
 },
 {
-"id": 8,
-"name": "8bb2736703fabcee9d65d5c3e304704a",
+"id": 13,
+"name": "ICONO - cobertura",
 "kind": "Smart Object",
 "visible": true,
 "bounds": [
-436,
-1890,
-114,
-115
+377,
+1883,
+104,
+104
+]
+},
+{
+"id": 11,
+"name": "ICONO - usb",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+382,
+2659,
+95,
+95
+]
+},
+{
+"id": 9,
+"name": "RAYA - SALDO",
+"kind": "Pixel",
+"visible": true,
+"bounds": [
+0,
+0,
+2480,
+3508
+]
+},
+{
+"id": 8,
+"name": "LISTA - RAYAS",
+"kind": "Smart Object",
+"visible": true,
+"bounds": [
+0,
+0,
+2480,
+3508
 ]
 },
 {
 "id": 6,
-"name": "288",
-"kind": "Smart Object",
-"visible": false,
+"name": "TARJETAS",
+"kind": "Pixel",
+"visible": true,
 "bounds": [
-442,
-2443,
-89,
-89
+0,
+0,
+2480,
+3508
+]
+},
+{
+"id": 5,
+"name": "CABECERA",
+"kind": "Pixel",
+"visible": true,
+"bounds": [
+0,
+0,
+2480,
+3508
 ]
 },
 {

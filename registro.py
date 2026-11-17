@@ -1,4 +1,5 @@
 """Historial de clientes y pagos (base de datos SQLite local)."""
+import json
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
@@ -16,7 +17,8 @@ CREATE TABLE IF NOT EXISTS clientes(
     lugar TEXT,
     fecha_evento TEXT,
     total REAL NOT NULL,
-    creado TEXT
+    creado TEXT,
+    servicios TEXT
 );
 CREATE TABLE IF NOT EXISTS pagos(
     id INTEGER PRIMARY KEY,
@@ -41,6 +43,7 @@ class Cliente:
     total: float
     pagado: float
     num_pagos: int
+    servicios: list = None   # lo que dice su comprobante (paquete con cambios y extras); None: los del paquete
 
     @property
     def saldo(self):
@@ -58,16 +61,23 @@ def _conexion():
     con = sqlite3.connect(rutas.BASE_DATOS)
     con.execute("PRAGMA foreign_keys = ON")
     con.executescript(ESQUEMA)
+    if "servicios" not in {f[1] for f in con.execute("PRAGMA table_info(clientes)")}:   # historial anterior
+        con.execute("ALTER TABLE clientes ADD COLUMN servicios TEXT")
     return con
 
 
-def nuevo_cliente(festejado, telefono, evento, paquete, lugar, fecha_evento: date, total):
+def _json(servicios):
+    return json.dumps(servicios, ensure_ascii=False) if servicios else None
+
+
+def nuevo_cliente(festejado, telefono, evento, paquete, lugar, fecha_evento: date, total, servicios=None):
     with closing(_conexion()) as con, con:
         cur = con.execute(
-            "INSERT INTO clientes(festejado, telefono, evento, paquete, lugar, fecha_evento, total, creado)"
-            " VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO clientes(festejado, telefono, evento, paquete, lugar, fecha_evento, total, creado,"
+            " servicios) VALUES (?,?,?,?,?,?,?,?,?)",
             (festejado.strip(), telefono.strip(), evento, paquete, lugar.strip(),
-             fecha_evento.isoformat(), float(total), datetime.now().isoformat(timespec="seconds")))
+             fecha_evento.isoformat(), float(total), datetime.now().isoformat(timespec="seconds"),
+             _json(servicios)))
         return cur.lastrowid
 
 
@@ -78,14 +88,14 @@ def agregar_pago(cliente_id, fecha: date, monto, concepto, comprobante):
 
 
 def corregir_reserva(cliente_id, festejado, telefono, evento, paquete, lugar, fecha_evento: date, total,
-                     fecha_pago: date, monto, concepto, comprobante):
+                     fecha_pago: date, monto, concepto, comprobante, servicios=None):
     """Si se vuelve a generar el comprobante recién hecho, actualiza ese cliente y su primer pago
     en vez de crear un cliente duplicado."""
     with closing(_conexion()) as con, con:
         con.execute("UPDATE clientes SET festejado=?, telefono=?, evento=?, paquete=?, lugar=?, fecha_evento=?,"
-                    " total=? WHERE id=?",
+                    " total=?, servicios=? WHERE id=?",
                     (festejado.strip(), telefono.strip(), evento, paquete, lugar.strip(),
-                     fecha_evento.isoformat(), float(total), cliente_id))
+                     fecha_evento.isoformat(), float(total), _json(servicios), cliente_id))
         primero = con.execute("SELECT id FROM pagos WHERE cliente_id=? ORDER BY id LIMIT 1",
                               (cliente_id,)).fetchone()
         if primero:
@@ -103,12 +113,12 @@ def eliminar_cliente(cliente_id):
 
 def _fila_a_cliente(f):
     return Cliente(f[0], f[1], f[2] or "", f[3] or "", f[4] or "", f[5] or "",
-                   date.fromisoformat(f[6]), f[7], f[8] or 0, f[9] or 0)
+                   date.fromisoformat(f[6]), f[7], f[8] or 0, f[9] or 0, json.loads(f[10]) if f[10] else None)
 
 
 _CONSULTA = """
 SELECT c.id, c.festejado, c.telefono, c.evento, c.paquete, c.lugar, c.fecha_evento, c.total,
-       COALESCE(SUM(p.monto), 0), COUNT(p.id)
+       COALESCE(SUM(p.monto), 0), COUNT(p.id), c.servicios
 FROM clientes c LEFT JOIN pagos p ON p.cliente_id = c.id
 """
 

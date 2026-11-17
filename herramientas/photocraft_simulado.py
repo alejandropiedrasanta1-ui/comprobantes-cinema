@@ -32,6 +32,8 @@ def _planas(capas):
 
 ORIGINAL = {l["id"]: l for l in _planas(CAPAS["layers"])}
 FUENTES = sorted({(l.get("text") or {}).get("font") for l in ORIGINAL.values()} - {None})
+CAPTURA = next((l["id"] for l in ORIGINAL.values() if l.get("kind") == "Smart Object" and l.get("bounds")
+                and l["bounds"][0] > 1400 and l["bounds"][2] > 400 and l["bounds"][3] > 800), None)
 
 
 class Documento:
@@ -39,7 +41,7 @@ class Documento:
         psd = Path(psd)
         if not psd.is_file():
             raise FileNotFoundError(f"no existe {psd}")
-        self.fondo = psd.with_name(psd.name.replace("COMPROBANTE - ", "VISTA PREVIA - ")).with_suffix(".jpg")
+        self.fondo = psd.with_name("VISTA PREVIA.jpg")     # la vista previa de la plantilla única
         self.estado = {"textos": {}, "dx": {}, "tam": {}, "captura": None}
         self.instantaneas = {}
 
@@ -53,14 +55,30 @@ class Documento:
         x0 = x + self.estado["dx"].get(capa, 0)
         return [round(x0), y, round(x0 + largo * pt * PX_POR_PT * 0.55), y + h]
 
+    def lineas(self, capa, texto, runs):
+        """Renglones de una capa de texto con estilos por tramo: cada uno baja lo que diga su interlineado."""
+        x, y, _, _ = ORIGINAL[capa]["bounds"]
+        lineas, inicio, base = [], 0, 0.0
+        for renglon in texto.split("\n"):
+            leading = next((r.get("leading", 12) for r in runs if r["start"] <= inicio < r["end"]), 12)
+            base += leading * PX_POR_PT
+            lineas.append({"start": inicio, "baseline": base})
+            inicio += len(renglon) + 1
+        return {"transform": [1, 0, 0, 1, x, y], "lines": lineas}
+
     def ejecutar(self, comando, p):
         capa = p.get("layer")
         if comando == "type.edit":
+            if capa not in ORIGINAL:
+                return {}
             if "text" in p:
                 self.estado["textos"][capa] = p["text"]
             if "move" in p:
                 self.estado["dx"][capa] = self.estado["dx"].get(capa, 0) + p["move"][0]
-            return {"layer": capa, "bounds": self.caja(capa)}
+            r = {"layer": capa, "bounds": self.caja(capa)}
+            if p.get("runs"):     # la lista del comprobante: líneas con su renglón base, como el real
+                r.update(self.lineas(capa, p["text"], p["runs"]))
+            return r
         if comando == "type.setStyle":
             if "size" in p:
                 self.estado["tam"][capa] = p["size"]
@@ -68,7 +86,8 @@ class Documento:
         if comando == "type.fonts":
             return {"families": FUENTES}
         if comando == "layer.smartObjects.replaceContents":
-            self.estado["captura"] = p["path"]
+            if capa == CAPTURA:     # la de la lista (rayas) no se dibuja en la simulación
+                self.estado["captura"] = p["path"]
             return {"layer": capa}
         if comando == "history.newSnapshot":
             n = max(self.instantaneas, default=0) + 1
@@ -96,7 +115,7 @@ class Documento:
             d.multiline_text((self.caja(capa)[0], y), texto, fill="black", font=letra)
         if self.estado["captura"]:
             cap = next(l for l in ORIGINAL.values() if l.get("kind") == "Smart Object" and l["bounds"][0] > 1400
-                       and l["bounds"][2] > 500)
+                       and l["bounds"][2] > 400)
             x, y, w, h = cap["bounds"]
             im.paste(Image.open(self.estado["captura"]).convert("RGB").resize((w, h)), (x, y))
         d.text((40, ALTO - 120), "PhotoCraft simulado (prueba)", fill=(220, 0, 0),
@@ -156,10 +175,11 @@ def _run(args):
             i += 2
             continue
         if a == "--cmd":
-            comando, params = args[i + 1], json.loads(args[i + 3])
+            con_params = i + 3 < len(args) and args[i + 2] == "--params"   # «type.fonts» va sin parámetros
+            comando, params = args[i + 1], json.loads(args[i + 3]) if con_params else {}
             r = doc.ejecutar(comando, params) if doc else ({"families": FUENTES} if comando == "type.fonts" else {})
             print(json.dumps({"command": comando, "result": r}, ensure_ascii=False))
-            i += 4
+            i += 4 if con_params else 2
             continue
         if a == "--out":
             salida = args[i + 1]

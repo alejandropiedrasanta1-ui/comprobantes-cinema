@@ -6,9 +6,9 @@
   "paquete_destacado": "COMPLETO",
   "vista_en_vivo": true,
   "calidad_jpg": 92,
+  "plantilla": "PLANTILLAS/COMPROBANTE.psd",
   "paquetes": {
     "ESENCIAL": {
-      "plantilla": "PLANTILLAS/COMPROBANTE - ESENCIAL.psd",
       "precio": 1500,
       "incluye": [
         ["Fotos ilimitadas", "(Sin límite de horas)", "camara"],
@@ -18,7 +18,6 @@
       ]
     },
     "INTERMEDIO": {
-      "plantilla": "PLANTILLAS/COMPROBANTE - INTERMEDIO.psd",
       "precio": 2200,
       "incluye": [
         ["Fotos ilimitadas", "(Sin límite de horas)", "camara"],
@@ -29,7 +28,6 @@
       ]
     },
     "COMPLETO": {
-      "plantilla": "PLANTILLAS/COMPROBANTE - COMPLETO.psd",
       "precio": 3500,
       "incluye": [
         ["Fotos ilimitadas", "(Sin límite de horas)", "camara"],
@@ -44,7 +42,6 @@
       ]
     },
     "PREMIUM": {
-      "plantilla": "PLANTILLAS/COMPROBANTE - PREMIUM.psd",
       "precio": 5200,
       "incluye": [
         ["Fotos ilimitadas", "(Sin límite de horas)", "camara"],
@@ -62,6 +59,24 @@
       ]
     }
   },
+  "extras": [
+    {"clave": "cabina_fotos", "titulo": "Cabina de fotos", "icono": "cabina_fotos",
+     "opciones": [["1 hora", 1200], ["2 horas", 1600], ["3 horas", 2100]]},
+    {"clave": "zancos", "titulo": "Actividad de zancos", "icono": "zancos",
+     "opciones": [["1 hora", 800], ["2 horas", 1500], ["3 horas", 2300]]},
+    {"clave": "audio_book", "titulo": "Audio Book", "icono": "telefono",
+     "opciones": [["1 hora", 600], ["2 horas", 800], ["3 horas", 1200]]},
+    {"clave": "cabina360", "titulo": "Cabina 360", "icono": "cabina360",
+     "opciones": [["1 hora - 2 personas", 1200], ["2 horas - 2 personas", 1500], ["3 horas - 4 personas", 1800]]},
+    {"clave": "espejo", "titulo": "Espejo mágico", "icono": "espejo",
+     "opciones": [["1 hora", 2100], ["2 horas", 2900], ["3 horas", 3900]]},
+    {"clave": "backdrop", "titulo": "Diseño a elección", "icono": "backdrop",
+     "opciones": [["2 horas", 700], ["4 horas", 1500], ["Todo el evento", 2000]]},
+    {"clave": "pirotecnia", "titulo": "Pirotecnia fría", "icono": "chispa",
+     "opciones": [["2 máquinas - 15 segundos", 600], ["4 máquinas - 30 segundos", 900]]},
+    {"clave": "cabezones", "titulo": "Show de cabezones", "icono": "cabezones",
+     "opciones": [["1 hora", 1600], ["2 horas", 2400], ["3 horas", 3700]]}
+  ],
   "sustitutos_fuente": {
     "Myriad Pro": { "fuente": "Open Sans", "estilo": "Bold", "tamano": 0.91, "ancho": 101 }
   },

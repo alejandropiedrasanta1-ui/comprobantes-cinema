@@ -110,6 +110,8 @@ def _capturas(carpeta):
         n.telefono.setText("+502 5555 0000")
         n.fecha_evento.setDate(QDate.currentDate().addDays(70))
         n.elegir_paquete("COMPLETO")
+        n.extras = [("cabina360", 1)]       # un extra de ejemplo: se ve su ficha y el total con el extra
+        n._poner_extras()
         paginas = [("1_nuevo", lambda: n.abrir_bloque(n.b1)), ("2_paquete", lambda: n.abrir_bloque(n.b2)),
                    ("3_clientes", lambda: v.switchTo(v.historial)), ("4_paquetes", lambda: v.switchTo(v.paquetes)),
                    ("5_ajustes", lambda: v.switchTo(v.ajustes))]

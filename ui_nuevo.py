@@ -7,10 +7,11 @@ import math
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
+from PySide6.QtCore import (QDate, QEasingCurve, QPoint, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation,
+                            Signal)
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
-from qfluentwidgets import (CalendarPicker, CaptionLabel, FlowLayout, FluentIcon as FIF,
+from qfluentwidgets import (Action, CalendarPicker, CaptionLabel, FlowLayout, FluentIcon as FIF, RoundMenu,
                             IndeterminateProgressRing, LineEdit, PrimaryPushButton, PushButton,
                             SegmentedWidget, SmoothScrollArea, StrongBodyLabel,
                             TitleLabel, ToolTipFilter, TransparentPushButton, TransparentToolButton,
@@ -18,6 +19,7 @@ from qfluentwidgets import (CalendarPicker, CaptionLabel, FlowLayout, FluentIcon
 
 import estilo
 import motor
+from lista import MAX_SERVICIOS
 import registro
 import rutas
 from estilo import Atajo, Cifra, Pildora
@@ -102,6 +104,25 @@ class _FilaServicios(QWidget):
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self._acomodar()
+
+
+class _ChipExtra(QWidget):
+    """Un extra agregado a este comprobante: «Cabina 360 · 2 horas · Q1,500» con ✕ para quitarlo."""
+    quitar = Signal()
+
+    def __init__(self, texto, icono, parent=None):
+        super().__init__(parent)
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(0)
+        h.addWidget(Pildora(texto, estilo.ROJO, icono_nombre=icono, tam_letra=12, alto=30))
+        x = TransparentToolButton(FIF.CLOSE)
+        x.setFixedSize(26, 26)
+        x.setIconSize(QSize(10, 10))
+        x.setToolTip("Quitar este extra")
+        x.installEventFilter(ToolTipFilter(x))
+        x.clicked.connect(self.quitar)
+        h.addWidget(x)
 
 
 class _Desvanecido(QWidget):
@@ -692,6 +713,21 @@ class NuevoInterface(QWidget):
                                          validas=(1, 2, 4)))
         self.servicios = _FilaServicios()
         self.b2.cuerpo.addWidget(self.servicios)
+        # Extras solo para este cliente (Cabina 360, zancos, espejo mágico…): van en su lista y suman al total
+        self.extras, self.chips_extra = [], []        # [(clave, opción)]
+        self.caja_extras = QWidget()
+        self.flujo_extras = FlowLayout(self.caja_extras, needAni=False)
+        self.flujo_extras.setContentsMargins(0, 0, 0, 0)
+        self.flujo_extras.setHorizontalSpacing(8)
+        self.flujo_extras.setVerticalSpacing(6)
+        self.b_extra = PushButton(FIF.ADD, "Agregar extra")      # en la cabecera: no gasta un renglón
+        self.b_extra.setFixedHeight(30)
+        self.b_extra.setToolTip("Suma un extra solo para este cliente: aparece en su lista y en el total")
+        self.b_extra.installEventFilter(ToolTipFilter(self.b_extra))
+        self.b_extra.clicked.connect(self._menu_extras)
+        self.b2.en_cabecera(self.b_extra)
+        self.caja_extras.hide()                         # la fila de fichas aparece solo si hay extras
+        self.b2.cuerpo.addWidget(self.caja_extras)
         v.addWidget(self.b2)
 
         # ---- ③ Pago y captura ----
@@ -702,7 +738,7 @@ class NuevoInterface(QWidget):
         self.fecha_pago.setDateFormat("dd/MM/yyyy")
         self.fecha_pago.setDate(QDate.currentDate())
         self.b3.cuerpo.addWidget(Rejilla([
-            _campo("Precio del paquete", self.total), _campo("Reserva / anticipo", self.reserva),
+            _campo("Precio total", self.total), _campo("Reserva / anticipo", self.reserva),
             _campo("Fecha del pago", self.fecha_pago)], max_columnas=3, ancho_min=128))
         self.zona = ZonaCaptura(100)          # clic para buscarla, arrastrar o Ctrl+V: no hacen falta botones
         self.b3.cuerpo.addWidget(self.zona)
@@ -853,12 +889,87 @@ class NuevoInterface(QWidget):
         paq = self.cfg["paquetes"][clave]
         for k, t in self.tarjetas.items():
             t.marcar(k == clave)
-        self.servicios.poner(paq.get("incluye", []))
-        self.total.setValue(int(paq["precio"]))
+        self.servicios.poner(self._servicios())
+        self.total.setValue(int(paq["precio"] + self._total_extras()))
         if desde_usuario:
             self._cambio()
             if not self.en_vivo.isChecked() and not (self.ultimo and not self.sin_generar):
                 self._mostrar_plantilla()      # sin vista en vivo: al menos la plantilla del paquete elegido
+
+    # ---- Extras (solo para este cliente) ----
+    def _catalogo_extras(self):
+        return {e["clave"]: e for e in self.cfg.get("extras", [])}
+
+    def _items_extras(self):
+        ex = self._catalogo_extras()
+        return [motor.item_extra(ex[c], o) for c, o in self.extras if c in ex]
+
+    def _total_extras(self):
+        ex = self._catalogo_extras()
+        return sum(motor.precio_extra(ex[c], o) for c, o in self.extras if c in ex)
+
+    def _servicios(self):
+        """Lo que dice el comprobante: el paquete (con sus cambios de la página Paquetes) y los extras."""
+        return motor.con_extras(self.cfg["paquetes"][self.paquete].get("incluye", []), self._items_extras())
+
+    def _mostrar_extras(self):
+        """Fichas de los extras en su fila; con la ventana baja (formulario apretado) la fila no se ve y el
+        botón dice cuántos hay (se quitan desde su menú)."""
+        n = len(self.chips_extra)
+        self.caja_extras.setVisible(bool(n) and not getattr(self, "apretado", False))
+        self.b_extra.setText(f"Extras ({n})" if n and getattr(self, "apretado", False) else "Agregar extra")
+
+    def _menu_extras(self):
+        menu = RoundMenu(parent=self)
+        ex = self._catalogo_extras()
+        for i, (c, o) in enumerate(self.extras):     # los ya agregados, para quitarlos desde aquí también
+            if c in ex:
+                a = Action(FIF.DELETE, f"Quitar {ex[c]['titulo']} · {ex[c]['opciones'][o][0]}", self)
+                a.triggered.connect(lambda _=False, i=i: self._quitar_extra(i))
+                menu.addAction(a)
+        if self.extras:
+            menu.addSeparator()
+        for extra in self.cfg.get("extras", []):
+            sub = RoundMenu(extra["titulo"], self)
+            sub.setIcon(estilo.icono(extra["icono"]))
+            for i, (texto, precio) in enumerate(extra["opciones"]):
+                a = Action(f"{texto}  ·  {q(precio)}", self)
+                a.triggered.connect(lambda _=False, c=extra["clave"], o=i: self._agregar_extra(c, o))
+                sub.addAction(a)
+            menu.addMenu(sub)
+        menu.exec(self.b_extra.mapToGlobal(QPoint(0, self.b_extra.height() + 4)))
+
+    def _agregar_extra(self, clave, opcion):
+        if len(self._servicios()) >= MAX_SERVICIOS:
+            aviso(self, "warning", "Demasiados servicios",
+                  f"El comprobante admite hasta {MAX_SERVICIOS} servicios para que se lean bien en el teléfono.")
+            return
+        self.extras.append((clave, opcion))
+        self._poner_extras()
+
+    def _quitar_extra(self, i):
+        if 0 <= i < len(self.extras):
+            del self.extras[i]
+        self._poner_extras()
+
+    def _poner_extras(self, avisar=True):
+        for w in self.chips_extra:
+            self.flujo_extras.removeWidget(w)
+            w.deleteLater()
+        ex = self._catalogo_extras()
+        self.chips_extra = []
+        for i, (c, o) in enumerate(self.extras):
+            e = ex.get(c)
+            if not e:
+                continue
+            texto, precio = e["opciones"][o]
+            chip = _ChipExtra(f"{e['titulo']} · {texto} · {q(precio)}", e["icono"])
+            chip.quitar.connect(lambda i=i: self._quitar_extra(i))
+            self.flujo_extras.insertWidget(len(self.chips_extra), chip)
+            self.chips_extra.append(chip)
+        self._mostrar_extras()
+        if avisar:
+            self.elegir_paquete(self.paquete)    # lista y total con los extras
 
     def actualizar_precios(self):
         for clave, t in self.tarjetas.items():
@@ -876,9 +987,10 @@ class NuevoInterface(QWidget):
             self.festejado.text().strip() or "Sin nombre", self.lugar.text().strip(),
             fe.strftime("%d/%m/%Y"), self.telefono.text().strip(), self.evento) if x),
             falta=f1[0] if len(f1) == 1 else (f"{len(f1)} datos" if f1 else None))
-        paq = self.cfg["paquetes"][self.paquete]
+        n_extras = len(self._items_extras())
         self.b2.poner_estado(True, f"{NOMBRES_PAQUETE.get(self.paquete, self.paquete)} · {q(self.total.value())} · "
-                                   f"{len(paq.get('incluye', []))} servicios")
+                                   f"{len(self._servicios())} servicios"
+                                   + (f" · {n_extras} extra{'s' if n_extras != 1 else ''}" if n_extras else ""))
         f3 = []
         if not self.zona.ruta:
             f3.append("captura del pago")
@@ -933,7 +1045,7 @@ class NuevoInterface(QWidget):
             fecha_comprobante=self.fecha_pago.getDate().toPython(),
             contacto=formatear_telefono(self.telefono.text()) if len(digitos_telefono(self.telefono.text())) >= 10
             else ("+502 0000 0000" if para_vista else self.telefono.text()),
-            total=total, monto=monto, saldo=max(total - monto, 0),
+            total=total, monto=monto, saldo=max(total - monto, 0), servicios=self._servicios(),
             concepto="RESERVA CON" if monto < total else "PAGO FINAL", captura=self.zona.ruta)
 
     def _render_vista(self):
@@ -1002,8 +1114,8 @@ class NuevoInterface(QWidget):
         self.estado.setText("No se pudo actualizar la vista previa: " + msg.splitlines()[0])
 
     def _mostrar_plantilla(self):
-        vista = rutas.recurso(f"PLANTILLAS/VISTA PREVIA - {self.paquete}.jpg")
-        self.estado.setText("Plantilla del paquete · se actualizará con tus datos")
+        vista = rutas.recurso("PLANTILLAS/VISTA PREVIA.jpg")    # una sola plantilla; la lista va al generar
+        self.estado.setText("Plantilla del comprobante · se actualizará con tus datos")
         if Path(vista).exists():
             self._poner_imagen(vista)
 
@@ -1072,6 +1184,7 @@ class NuevoInterface(QWidget):
         self.apretado = si
         self.pasos.setVisible(not si)
         self.servicios.setVisible(not si)
+        self._mostrar_extras()
         self.zona.setFixedHeight(62 if si else 100)
         for b in self.bloques:
             b.apretar(si)
@@ -1155,6 +1268,8 @@ class NuevoInterface(QWidget):
         self.cliente_id = None
         self.sin_generar = False
         self._botones_resultado()
+        self.extras = []
+        self._poner_extras(avisar=False)
         self.elegir_paquete(self.paquete, desde_usuario=False)
         self.abrir_bloque(self.b1)
         self._estado_bloques()
@@ -1199,10 +1314,11 @@ class NuevoInterface(QWidget):
         if corregido:
             registro.corregir_reserva(self.cliente_id, d["festejado"], d["contacto"], d["evento"], d["paquete"],
                                       d["lugar"], d["fecha_evento"], d["total"], d["fecha_comprobante"],
-                                      d["monto"], concepto, ruta)
+                                      d["monto"], concepto, ruta, servicios=d.get("servicios"))
         else:
             self.cliente_id = registro.nuevo_cliente(d["festejado"], d["contacto"], d["evento"], d["paquete"],
-                                                     d["lugar"], d["fecha_evento"], d["total"])
+                                                     d["lugar"], d["fecha_evento"], d["total"],
+                                                     servicios=d.get("servicios"))
             registro.agregar_pago(self.cliente_id, d["fecha_comprobante"], d["monto"], concepto, ruta)
         self.registrado.emit()
         self.ultimo = ruta
