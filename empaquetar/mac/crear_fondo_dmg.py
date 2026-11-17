@@ -109,19 +109,12 @@ def fondo():
     im.alpha_composite(sombra.filter(ImageFilter.GaussianBlur(5 * K)))
     im.alpha_composite(pil)
 
+    # Minimalista: el nombre, el ícono y una instrucción; abajo, muy tenue, qué hacer si macOS lo bloquea
     d = ImageDraw.Draw(im)
-    blanco, suave, tenue, coral = (246, 242, 242), (205, 192, 192), (150, 135, 135), (255, 106, 110)
-    titulo = fuente("segoeuib.ttf", 34)
-    centrado(d, 30 * K, "Comprobantes", titulo, blanco)
-    centrado(d, 76 * K, "CINEMA PRODUCTIONS  ·  INSTALADOR PARA MAC", fuente("seguisb.ttf", 10.5), coral, espaciado=1.6)
-
-    normal, negrita = fuente("segoeui.ttf", 15.5), fuente("segoeuib.ttf", 15.5)
-    linea_mixta(d, 318 * K, [("Haz doble clic en  ", normal, blanco), ("Instalar Comprobantes", negrita, blanco),
-                             ("  para instalar", normal, blanco)])
-    centrado(d, 346 * K, "Se instala solo en Aplicaciones y en el Dock  ·  no necesita internet  ·  menos de 1 minuto",
-             fuente("segoeui.ttf", 11.5), suave)
-    centrado(d, 372 * K, "¿macOS no lo deja abrir?  Ajustes del Sistema › Privacidad y seguridad › Abrir igualmente",
-             fuente("segoeui.ttf", 10), tenue)
+    blanco, suave, tenue = (246, 242, 242), (205, 192, 192), (128, 114, 114)
+    centrado(d, 42 * K, "Comprobantes", fuente("segoeuisl.ttf", 30), blanco)
+    centrado(d, 318 * K, "Doble clic para instalar", fuente("segoeui.ttf", 15), suave)
+    centrado(d, 372 * K, "¿No abre?  Ajustes › Privacidad y seguridad › Abrir igualmente", fuente("segoeui.ttf", 10), tenue)
     return im.convert("RGB")
 
 

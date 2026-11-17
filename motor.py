@@ -274,16 +274,20 @@ def olvidar_fuentes():
     _sesion.reiniciar = True
 
 
-def _fuentes_instaladas(cfg, sesion=None):
+def _fuentes_instaladas(cfg, sesion=None, fresco=False):
+    """Familias que ve PhotoCraft. fresco=True: pregunta de nuevo (tras instalar fuentes) sin usar la
+    caché, que pudo llenar un PhotoCraft abierto antes de instalarlas."""
     global _cache_fuentes
-    if sesion:   # el PhotoCraft de la vista en vivo ya está abierto: no hace falta otro
+    if sesion and not fresco:   # el PhotoCraft de la vista en vivo ya está abierto: no hace falta otro
         return sesion.fuentes_instaladas()
-    if _cache_fuentes is None:
+    if _cache_fuentes is None or fresco:
         salida = _cli(cfg, "run", "--new", '{"width":8,"height":8}', "--cmd", "type.fonts")
         familias = set()
         for linea in salida.splitlines():
             if linea.startswith("{"):
                 familias.update((json.loads(linea).get("result") or {}).get("families", []))
+        if fresco and _cache_fuentes is not None and familias != _cache_fuentes:
+            _sesion.reiniciar = True   # cambiaron las fuentes: la vista en vivo reabre PhotoCraft
         _cache_fuentes = familias
     return _cache_fuentes
 
@@ -583,6 +587,7 @@ class SesionPhotoCraft:
         self.clave = None        # (exe, carpetas de lectura, carpeta de escritura)
         self.doc = None          # {plantilla, clave, base0, base, captura} del documento abierto
         self.reiniciar = False   # se instalaron fuentes: hay que abrir PhotoCraft de nuevo
+        self.sin_lote = False    # este PhotoCraft no tiene «batch»: comandos uno por uno
         self.n = 0
         self.candado = threading.Lock()
         atexit.register(self.cerrar)
@@ -604,6 +609,7 @@ class SesionPhotoCraft:
                                      stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
                                      errors="replace", creationflags=SIN_VENTANA)
         self.clave = clave
+        self.sin_lote = False   # cada PhotoCraft nuevo se vuelve a probar con «batch»
 
     def _pedir(self, metodo, params):
         proc = self.proc
@@ -645,11 +651,20 @@ class SesionPhotoCraft:
         return self._pedir(*self._paso(comando, params))
 
     def _lote(self, cmds):
-        """Varios comandos en un solo pedido («batch»). PhotoCraft se detiene en el primero que falla."""
+        """Varios comandos en un solo pedido («batch»). PhotoCraft se detiene en el primero que falla.
+        Un PhotoCraft más viejo que no tenga «batch» (p. ej. en otra computadora) los recibe uno por uno."""
         if not cmds:
             return []
+        if self.sin_lote:
+            return [self._ejecutar(c, p) for c, p in cmds]
         pasos = [dict(zip(("method", "params"), self._paso(c, p))) for c, p in cmds]
-        r = self._pedir("batch", {"steps": pasos})
+        try:
+            r = self._pedir("batch", {"steps": pasos})
+        except RuntimeError as e:
+            if "batch" not in str(e) or not any(t in str(e).lower() for t in ("unknown method", "desconocido")):
+                raise
+            self.sin_lote = True
+            return [self._ejecutar(c, p) for c, p in cmds]
         resultados = r.get("results") or []
         for (comando, _), res in zip(cmds, resultados):
             if not res.get("ok"):
@@ -668,6 +683,8 @@ class SesionPhotoCraft:
 
     def fuentes_instaladas(self):
         global _cache_fuentes
+        if self.reiniciar:   # abierto antes de instalar fuentes: su lista es vieja, no se guarda
+            return set(self._ejecutar("type.fonts", {}).get("families", []))
         if _cache_fuentes is None:   # se comparte con el método normal (mismas fuentes del sistema)
             _cache_fuentes = set(self._ejecutar("type.fonts", {}).get("families", []))
         return _cache_fuentes

@@ -88,8 +88,11 @@ class Ventana(MSFluentWindow):
             QShortcut(QKeySequence(tecla), self, activated=self._generar)
 
         self.ajustar_a_pantalla()
-        if revisar:
+        if revisar:   # PhotoCraft de la vista en vivo se abre cuando termina la revisión de fuentes
+            self.nuevo.revisando = True   # desde ya: la primera vista (al abrir) espera a la revisión
             QTimer.singleShot(600, self.revisar_entorno)
+        else:
+            QTimer.singleShot(600, self.nuevo._calentar_vista)
 
     def ajustar_a_pantalla(self):
         """Tamaño según la pantalla (sin la barra de menú ni el Dock / la barra de tareas): cabe completa en una
@@ -140,6 +143,7 @@ class Ventana(MSFluentWindow):
 
     def revisar_entorno(self):
         if not os.path.isfile(self.cfg.get("photocraft_cli") or ""):
+            self.nuevo.revision_terminada()   # nada que revisar: la vista no espera
             caja = MessageBox("Falta PhotoCraft",
                               "Este programa usa PhotoCraft para crear los comprobantes y no lo encontré.\n\n"
                               "Si ya está instalado, indica dónde está.", self)
@@ -151,6 +155,9 @@ class Ventana(MSFluentWindow):
             return
         self.revision = Revision(self.cfg)
         self.revision.listo.connect(lambda m: aviso(self.nuevo, "info", "Fuentes", m, 6000))
+        # la vista en vivo espera a la revisión: si se instalan fuentes, PhotoCraft se abre ya con ellas
+        self.nuevo.revisando = True
+        self.revision.finished.connect(self.nuevo.revision_terminada)
         self.revision.start()
 
 

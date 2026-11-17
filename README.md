@@ -16,9 +16,10 @@ que se rehace con `python crear_plantillas.py`).
 
 ## Fuentes
 
-Las fuentes del diseño (**Lemon Milk**, **GetVoIP Grotesque** y **Myriad Pro**) no están en este
-repositorio por sus licencias. Al abrir el programa, si faltan, ve a *Ajustes › Fuentes del diseño*
-y elige la carpeta donde están los archivos `.otf`.
+Las fuentes del diseño (**Lemon Milk**, **GetVoIP Grotesque** y **Myriad Pro**) están en
+`recursos/fuentes` y van dentro de los instaladores de Windows y de Mac: al abrir el programa, si
+faltan en la computadora, se instalan solas (solo para el usuario). También se pueden instalar desde
+otra carpeta en *Ajustes › Fuentes del diseño*.
 
 ## Compilar
 

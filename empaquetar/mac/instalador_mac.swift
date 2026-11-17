@@ -161,7 +161,7 @@ struct BotonPildora: ButtonStyle {
     }
 }
 
-let ANCHO: CGFloat = 560, ALTO: CGFloat = 400
+let ANCHO: CGFloat = 400, ALTO: CGFloat = 330   // minimalista: anillo, una palabra y el porcentaje
 
 struct VistaInstalador: View {
     @ObservedObject var av: Avance
@@ -178,15 +178,14 @@ struct VistaInstalador: View {
                 Ellipse()
                     .fill(RadialGradient(colors: [colorEstado.opacity(0.18 + 0.05 * sin(t * 1.6)), colorEstado.opacity(0)],
                                          center: .center, startRadius: 0, endRadius: 220))
-                    .frame(width: 500, height: 400).offset(y: -130)
+                    .frame(width: ANCHO, height: ALTO).offset(y: -100)
                 VStack(spacing: 0) {
-                    anillo(t).frame(width: 150, height: 150).padding(.top, 40)
-                    titulo.padding(.top, 18)
-                    detalle.padding(.top, 8).padding(.horizontal, 36)
-                    cifra.padding(.top, 6)
-                    puntos.padding(.top, 12)
+                    anillo(t).frame(width: 150, height: 150).padding(.top, 44)
+                    titulo.padding(.top, 22)
+                    detalle.padding(.top, 8).padding(.horizontal, 32)
+                    cifra.padding(.top, 2)
                     Spacer(minLength: 0)
-                    pie.padding(.bottom, 20)
+                    pie.padding(.bottom, 22)
                 }
                 .frame(width: ANCHO, height: ALTO)
             }
@@ -236,67 +235,33 @@ struct VistaInstalador: View {
         }
     }
 
-    // ---- textos
+    // ---- textos (pocos: el anillo ya cuenta el avance)
     var titulo: some View {
-        Group {
-            if av.estado == "listo" {
-                Text("¡Comprobantes está listo!").foregroundColor(TEXTO)
-            } else if av.estado == "error" {
-                Text("No se pudo instalar").foregroundColor(TEXTO)
-            } else {
-                Text("Instalando ").foregroundColor(TEXTO) + Text("Comprobantes").foregroundColor(CORAL)
-                    + Text(" \(version)").foregroundColor(TEXTO)
-            }
-        }
-        .font(.system(size: 24, weight: .bold)).lineLimit(1)
+        Text(av.estado == "listo" ? "¡Listo!" : (av.estado == "error" ? "No se pudo instalar" : "Instalando"))
+            .font(.system(size: 22, weight: .semibold)).foregroundColor(TEXTO).lineLimit(1)
     }
 
-    var detalle: some View {
-        var texto: String
-        var color = SUAVE
-        if av.estado == "listo" {
-            texto = "Abriendo Comprobantes…"; color = VERDE
-        } else if av.estado == "error" {
-            texto = av.mensaje; color = ERROR
-        } else if av.paso == 0 {
-            texto = "Preparando…"
-        } else if av.paso == 1 {
-            texto = av.mbTotal > 0 ? "Copiando a Aplicaciones · \(Int(av.mbHecho)) de \(Int(av.mbTotal)) MB" : "Copiando a Aplicaciones…"
-        } else {
-            texto = PASOS[min(av.paso, NPASOS) - 1]
+    // solo si hay algo que decir: el error, o un aviso mientras instala
+    @ViewBuilder var detalle: some View {
+        if av.estado == "error" {
+            Text(av.mensaje).font(.system(size: 13, weight: .medium)).foregroundColor(ERROR)
+                .multilineTextAlignment(.center).lineLimit(3).frame(maxWidth: .infinity)
+        } else if av.estado == "instalando" && !av.aviso.isEmpty {
+            Text(av.aviso).font(.system(size: 13, weight: .medium)).foregroundColor(AMBAR.opacity(0.9))
+                .multilineTextAlignment(.center).lineLimit(2).frame(maxWidth: .infinity)
         }
-        if av.estado == "instalando" && !av.aviso.isEmpty { texto = av.aviso; color = AMBAR.opacity(0.9) }
-        return Text(texto).font(.system(size: 14, weight: .medium)).foregroundColor(color)
-            .multilineTextAlignment(.center).lineLimit(2).frame(maxWidth: .infinity)
     }
 
-    var cifra: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if av.estado != "error" {
-                Text("\(Int(av.valor.rounded())) %").font(.system(size: 40, weight: .bold)).monospacedDigit().foregroundColor(TEXTO)
-            }
-        }
-        .frame(height: 50)
-    }
-
-    var puntos: some View {
-        HStack(spacing: 10) {
-            ForEach(1...NPASOS, id: \.self) { i in
-                let hecho = av.estado == "listo" || i < av.paso
-                let actual = av.estado != "listo" && i == max(1, av.paso)
-                Capsule()
-                    .fill(actual ? (av.estado == "error" ? ERROR : CORAL) : (hecho ? VERDE.opacity(0.8) : SUAVE.opacity(0.35)))
-                    .frame(width: actual ? 22 : 6, height: 6)
-            }
+    @ViewBuilder var cifra: some View {
+        if av.estado == "instalando" {
+            Text("\(Int(av.valor.rounded())) %").font(.system(size: 17, weight: .medium)).monospacedDigit()
+                .foregroundColor(SUAVE)
         }
     }
 
     @ViewBuilder var pie: some View {
         if av.estado == "error" {
             Button("Cerrar", action: cerrar).buttonStyle(BotonPildora())
-        } else {
-            Text("Sin contraseña  ·  Se abre solo al terminar  ·  Mac con Apple Silicon")
-                .font(.system(size: 12, weight: .medium)).foregroundColor(TENUE)
         }
     }
 }

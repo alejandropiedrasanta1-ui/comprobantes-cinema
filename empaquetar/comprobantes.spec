@@ -17,7 +17,7 @@ datas = [
     (str(RAIZ / "recursos" / "iconos"), "recursos/iconos"),   # íconos de la interfaz (Higgsfield)
     (str(RAIZ / "recursos" / "ilustracion_vacio_claro.png"), "recursos"),
 ]
-# Las fuentes van incluidas solo si están en la carpeta (en GitHub no se publican por licencia)
+# Las fuentes del diseño (recursos/fuentes, también en el repositorio: van en Windows y en Mac)
 if any((RAIZ / "recursos" / "fuentes").glob("*.*")):
     datas.append((str(RAIZ / "recursos" / "fuentes"), "recursos/fuentes"))
 datas += [(str(p), "PLANTILLAS") for p in sorted((RAIZ / "PLANTILLAS").glob("*.psd"))]

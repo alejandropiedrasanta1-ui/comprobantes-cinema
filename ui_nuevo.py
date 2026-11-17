@@ -693,6 +693,7 @@ class NuevoInterface(QWidget):
         self._hilos_vista = set()   # hilos vivos: se sueltan recién cuando terminan del todo
         self.vista_ruta = None
         self.n_vista = 0
+        self.revisando = False      # la ventana revisa las fuentes al abrir: la vista en vivo espera
         self.zoom = 1.0             # zoom de la vista previa (1 = ajustada al panel); el que se ve ahora
         self._zoom_meta = 1.0       # a dónde va (la rueda anima de self.zoom hacia aquí)
         self._zoom_ancla = QPointF()
@@ -905,7 +906,7 @@ class NuevoInterface(QWidget):
         self.velo = _Velo(panel)          # «generando» y «listo» animados sobre la vista previa
 
         # ================= Barra fija inferior =================
-        barra = _Barra()
+        barra = self.barra = _Barra()
         barra.setFixedHeight(74)
         hb = self.hb_barra = QHBoxLayout(barra)
         hb.setContentsMargins(28, 10, 22, 10)
@@ -974,9 +975,18 @@ class NuevoInterface(QWidget):
         self._botones_resultado()
         self._mostrar_plantilla()
         self._cambio(programar=False)
-        QTimer.singleShot(600, self._calentar_vista)   # PhotoCraft listo antes de la primera tecla
+
+    def revision_terminada(self):
+        """La ventana terminó de revisar (e instalar) las fuentes: sale la vista que esperaba, o se deja
+        PhotoCraft listo para la primera tecla."""
+        self.revisando = False
+        if self.vista_pendiente and not self.vista_ocupada:
+            self._render_vista()
+        else:
+            self._calentar_vista()
 
     def _calentar_vista(self):
+        """PhotoCraft listo antes de la primera tecla (al terminar de revisar las fuentes)."""
         if self.en_vivo.isChecked() and not self.vista_ocupada and self.vista_ruta is None:
             # hilo de Python (daemon) y no QThread: si se cierra el programa mientras tanto, no lo traba
             threading.Thread(target=motor.calentar_vista, daemon=True,
@@ -1166,7 +1176,10 @@ class NuevoInterface(QWidget):
             return
         # Bandera propia y no isRunning(): «listo» llega cuando el hilo aún no termina run(), y con
         # isRunning() la vista siguiente quedaba en espera sin que nadie la lanzara (vista congelada).
-        if self.vista_ocupada:
+        # Mientras se revisan las fuentes (al abrir) también espera: la lanza revision_terminada().
+        if self.vista_ocupada or self.revisando:
+            if self.revisando and self.vista_ruta is None:
+                self.estado.setText("Preparando la vista previa…")
             self.vista_pendiente = True
             return
         self.vista_pendiente = False
@@ -1412,6 +1425,16 @@ class NuevoInterface(QWidget):
         self.viendo_vista = si
         self._acomodar()
 
+    def _ancho_util_vista(self):
+        """Ancho del panel en el que el comprobante (A4 vertical) llena el alto disponible al 100 %; nunca
+        menos de lo que pide su cabecera (título, «En vivo» y zoom)."""
+        alto = self.height() - self.barra.sizeHint().height()
+        i, a, d, b = _PanelVista.MARGEN
+        vertical = (a + 12) + 40 + 6 + 20 + 6 + 2 * MARGEN_LIENZO + (b + 6)    # márgenes, cabecera y estado
+        horizontal = (i + 18) + (d + 14) + 2 * MARGEN_LIENZO + 12
+        minimo = self.panel_vista.layout().minimumSize().width() + 8   # lo que pide la cabecera con esta letra
+        return int(max(minimo, (alto - vertical) / (3508 / 2480) + horizontal))
+
     def _acomodar(self):
         ancho = self.width()
         compacto = ancho < ANCHO_COMPACTO
@@ -1426,6 +1449,9 @@ class NuevoInterface(QWidget):
         mitad = ancho < 1300
         self.cuerpo.setStretchFactor(self.scroll_form, 50 if mitad else 44)
         self.cuerpo.setStretchFactor(self.panel_vista, 50 if mitad else 56)
+        # La vista previa no necesita más ancho que el que usa el comprobante a esta altura (es A4 vertical):
+        # lo que sobra va al formulario, que así no se apila ni se corta (laptops, ventanas bajas).
+        self.panel_vista.setMaximumWidth(16777215 if compacto else self._ancho_util_vista())
         QTimer.singleShot(40, self._revisar_alto)
         QTimer.singleShot(90, self.desvanecido.revisar)
         corta = ancho < ANCHO_BARRA_CORTA

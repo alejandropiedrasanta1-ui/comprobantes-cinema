@@ -1,8 +1,7 @@
 """Instala (solo para el usuario actual) las fuentes del diseño si PhotoCraft no las encuentra.
 
-Las fuentes vienen dentro del programa (recursos/fuentes) cuando la licencia lo permite.
-Si no vienen (por ejemplo, la versión de Mac compilada en GitHub), se pueden instalar
-eligiendo la carpeta donde están: instalar_desde(carpeta)."""
+Las fuentes vienen dentro del programa (recursos/fuentes, también en el repositorio y en el .dmg
+de Mac). Además se pueden instalar eligiendo la carpeta donde están: instalar_desde(carpeta)."""
 import shutil
 from pathlib import Path
 

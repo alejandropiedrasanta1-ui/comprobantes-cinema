@@ -47,8 +47,7 @@ Instalar:  abre el .dmg y haz doble clic en «Instalar Comprobantes». Se abre u
            Ajustes del Sistema > Privacidad y seguridad > «Abrir igualmente».
 Primera vez en la Mac:
   - Instala PhotoCraft para Mac.
-  - Copia a la Mac la carpeta PROGRAMA\recursos\fuentes y en el programa ve a
-    Ajustes > Fuentes del diseño > «Instalar desde carpeta…» (no van en el .dmg por licencia).
+  - Las fuentes del diseño van dentro del .dmg: el programa las instala solo al abrirse.
 
 Cómo se crean: GitHub Actions los compila solo en cada cambio que se sube al repositorio
   https://github.com/alejandropiedrasanta1-ui/comprobantes-cinema  (pestaña Actions > artefactos).

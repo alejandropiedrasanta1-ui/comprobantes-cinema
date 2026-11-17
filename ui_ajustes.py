@@ -37,8 +37,8 @@ class _EstadoFuentes(QThread):
 
     def run(self):
         try:
-            motor.olvidar_fuentes()
-            self.listo.emit(fuentes.faltantes(motor._fuentes_instaladas(self.cfg)))
+            # fresco: pregunta de nuevo; si cambiaron, la vista en vivo reabre PhotoCraft (si no, no)
+            self.listo.emit(fuentes.faltantes(motor._fuentes_instaladas(self.cfg, fresco=True)))
         except Exception:
             self.listo.emit(["(no se pudo revisar)"])
 

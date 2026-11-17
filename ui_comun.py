@@ -174,7 +174,12 @@ class Revision(QThread):
                 return
             hechos = fuentes.instalar(faltan_f)
             motor.olvidar_fuentes()
-            siguen = fuentes.faltantes(motor._fuentes_instaladas(self.cfg))
+            siguen = fuentes.faltantes(motor._fuentes_instaladas(self.cfg, fresco=True))
+            for _ in range(3 if hechos and siguen else 0):   # macOS tarda unos segundos en registrarlas
+                self.msleep(2000)
+                siguen = fuentes.faltantes(motor._fuentes_instaladas(self.cfg, fresco=True))
+                if not siguen:
+                    break
             if siguen:
                 self.listo.emit("Faltan las fuentes del diseño (" + ", ".join(siguen) + "). "
                                 "Ve a Ajustes › Fuentes del diseño y elige la carpeta donde están.")
