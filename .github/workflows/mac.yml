@@ -62,16 +62,18 @@ jobs:
           DMG=$(ls salida/*.dmg | head -1)
           hdiutil attach "$DMG" -nobrowse
           ls "/Volumes/Comprobantes Cinema"
-          ( sleep 4; screencapture -x "$PWD/capturas/6_instalando.png" ) &
+          ( sleep 1.5; screencapture -x "$PWD/capturas/6a_instalando.png"; sleep 1.5; screencapture -x "$PWD/capturas/6b_instalando.png" ) &
           open -W "/Volumes/Comprobantes Cinema/Instalar Comprobantes Cinema.app"
           sleep 6
           test -d "/Applications/Comprobantes Cinema.app" && echo "OK: instalado en Aplicaciones"
-          defaults read com.apple.dock persistent-apps | grep -q "Comprobantes Cinema.app" && echo "OK: está en el Dock"
+          defaults read com.apple.dock persistent-apps | grep -i "comprobantes" && echo "OK: está en el Dock"
           pgrep -f "Comprobantes Cinema.app/Contents/MacOS" && echo "OK: el programa se abrió"
           screencapture -x "$PWD/capturas/7_instalado_dock.png" || true
           sleep 2
           if [ -d "/Volumes/Comprobantes Cinema" ]; then echo "AVISO: el disco sigue montado"; else echo "OK: el disco se expulsó"; fi
           pkill -f "Comprobantes Cinema.app/Contents/MacOS" || true
+          sleep 3
+          screencapture -x "$PWD/capturas/8_dock_con_programa_cerrado.png" || true
 
       - uses: actions/upload-artifact@v4
         if: always()

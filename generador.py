@@ -48,7 +48,6 @@ def _verificar():
 
 def _capturas(carpeta):
     """Abre la ventana con datos de ejemplo inventados y guarda una imagen de cada pantalla."""
-    import subprocess
     import tempfile
     from PySide6.QtCore import QDate, QEventLoop, QLocale, QTimer, QTranslator, QLibraryInfo
     from PySide6.QtGui import QColor
@@ -114,15 +113,7 @@ def _capturas(carpeta):
                 v.historial.tabla.selectRow(1)
             esperar(1200)
             archivo = carpeta / f"{nombre}_{tema.lower()}.png"
-            g = v.frameGeometry()
-            # Foto de la pantalla real (con los botones de la ventana de Mac); si no hay permiso, la de Qt
-            hecho = False
-            if sys.platform == "darwin":
-                r = subprocess.run(["screencapture", "-x", "-R", f"{g.x()},{g.y()},{g.width()},{g.height()}",
-                                    str(archivo)], capture_output=True)
-                hecho = r.returncode == 0 and archivo.exists() and archivo.stat().st_size > 50_000
-            if not hecho:
-                v.grab().save(str(archivo))
+            v.grab().save(str(archivo))  # la ventana completa, aunque la pantalla sea más chica
             print("captura:", archivo.name)
         v.close()
         esperar(500)

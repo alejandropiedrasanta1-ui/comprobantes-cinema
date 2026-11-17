@@ -32,7 +32,7 @@ on run
 	set progress completed steps to 1
 	set progress additional description to "Agregando al Dock"
 	try
-		do shell script "if ! defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q " & quoted form of nombreApp & "; then defaults write com.apple.dock persistent-apps -array-add '<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>" & destino & "</string><key>_CFURLStringType</key><integer>0</integer></dict></dict></dict>'; killall Dock; fi"
+		do shell script "if ! defaults read com.apple.dock persistent-apps 2>/dev/null | grep -qi 'comprobantes'; then defaults write com.apple.dock persistent-apps -array-add '<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>" & destino & "</string><key>_CFURLStringType</key><integer>0</integer></dict></dict></dict>'; killall Dock; fi"
 	end try
 
 	set progress completed steps to 2
