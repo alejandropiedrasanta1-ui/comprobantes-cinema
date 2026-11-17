@@ -32,14 +32,20 @@ Volver a crear el instalador (después de cambiar el programa o las plantillas):
 
 MAC
 ---
-El instalador de Mac se tiene que crear EN una Mac:
-  1. Copia la carpeta GENERADOR completa a la Mac.
-  2. Abre Terminal, escribe  bash  y un espacio, arrastra el archivo
-     PROGRAMA/empaquetar/CREAR APP MAC.command  a la ventana y pulsa Enter.
-     (Si no tienes Python 3, el script te dirá dónde descargarlo.)
-  3. Al terminar queda  INSTALADOR/Comprobantes Cinema (Mac) 2.1.0.dmg
+Hay dos versiones en INSTALADOR (elige según el procesador de la Mac:  > Acerca de esta Mac):
+  - Comprobantes Cinema (Mac Apple Silicon) X.dmg   Mac con chip M1, M2, M3, M4…
+  - Comprobantes Cinema (Mac Intel) X.dmg           Mac con procesador Intel
 Instalar:  abre el .dmg y arrastra «Comprobantes Cinema» a Aplicaciones.
            La primera vez ábrelo con clic derecho > Abrir (no está firmado por Apple).
+Primera vez en la Mac:
+  - Instala PhotoCraft para Mac.
+  - Copia a la Mac la carpeta PROGRAMA\recursos\fuentes y en el programa ve a
+    Ajustes > Fuentes del diseño > «Instalar desde carpeta…» (no van en el .dmg por licencia).
+
+Cómo se crean: GitHub Actions las compila solo en cada cambio que se sube al repositorio
+  https://github.com/alejandropiedrasanta1-ui/comprobantes-cinema  (pestaña Actions > artefactos).
+También se pueden crear en una Mac: Terminal > bash + arrastrar
+  PROGRAMA/empaquetar/CREAR APP MAC.command  > Enter.
 
 
 DÓNDE QUEDA CADA COSA
