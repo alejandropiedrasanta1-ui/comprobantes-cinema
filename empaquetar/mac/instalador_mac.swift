@@ -1,10 +1,15 @@
 // =============================================================================================================================
-// Contents/MacOS/instalar de "Instalar Comprobantes.app" (la app del DMG): la ventana del instalador, NATIVA (AppKit + SwiftUI),
-// con el mismo esquema que el instalador de CineSlide: aparece al instante con el doble clic, muestra los pasos con una barra
-// de progreso y, al terminar, abre Comprobantes Cinema, se cierra y expulsa el disco.
-// - Si Comprobantes Cinema ya está instalado con la misma versión o una más nueva, solo lo abre.
-// - Pasos: 1) copiar el programa a Aplicaciones (o a ~/Aplicaciones si no hay permiso), 2) fijarlo en el Dock,
-//   3) revisar que PhotoCraft esté instalado (si falta, avisa: el programa lo necesita para crear los comprobantes).
+// Contents/MacOS/instalar de «Instalar Comprobantes.app» (la app del .dmg): la ventana del instalador, NATIVA (AppKit + SwiftUI).
+// Mismo método que el de CineCaptions (v5.92, a su vez de CineSlide): un doble clic → instala → se cierra → abre Comprobantes y
+// queda en el Dock. Simple, sin contraseña.
+// - Si Comprobantes Cinema ya está instalado con esta versión o una más nueva, solo lo abre.
+// - Si no: ventana mínima (560 × 400): el logo dentro de un anillo que ES el progreso, qué está haciendo (los MB mientras copia),
+//   el porcentaje grande y un punto por paso: 1) Comprobantes en Aplicaciones (o en ~/Aplicaciones si no hay permiso),
+//   2) la app en el Dock. Al terminar abre Comprobantes en el acto, se cierra y expulsa el disco. Si falla: el motivo y «Cerrar».
+// - El programa viaja OCULTO en el disco, junto a esta app («.Comprobantes Cinema.app») y no dentro: así esta app pesa poco y
+//   macOS no revisa cientos de MB antes de mostrar la ventana (aparece al instante). Si macOS la abre «trasladada»
+//   (App Translocation: una copia aparte, sin lo que tiene al lado), se busca en el disco montado (/Volumes/Comprobantes…).
+// - ⌘Q se puede siempre: copia a «….app.nuevo» y recién al final cambia el nombre (nunca queda nada a medias).
 //   instalar --demo | --demo-error      simula una instalación (para ver el diseño y sacar capturas)
 // Lo compila empaquetar/crear_instalador_mac.sh en una Mac (swiftc, solo arm64: Apple Silicon); Windows no puede.
 // =============================================================================================================================
@@ -19,16 +24,20 @@ extension Color {
     }
 }
 
-let ROJO = Color(hex: 0xe0262b), CORAL = Color(hex: 0xff5a5f), NARANJA = Color(hex: 0xff9a3d)
-let TEXTO = Color(hex: 0xf6f2f2), SUAVE = Color(hex: 0xbdb3b3), TENUE = Color(hex: 0x716868)
-let VERDE = Color(hex: 0x3ed392), ERROR = Color(hex: 0xff6b6b), AMBAR = Color(hex: 0xffc46b)
+let ROJO = Color(hex: 0xe5252a), CORAL = Color(hex: 0xff4d52), DORADO = Color(hex: 0xffb35c)
+let TEXTO = Color(hex: 0xf4f1f2), SUAVE = Color(hex: 0xb3abae), TENUE = Color(hex: 0x6e676a)
+let VERDE = Color(hex: 0x22c55e), MENTA = Color(hex: 0x7af0b0), AMBAR = Color(hex: 0xf5b84b), ERROR = Color(hex: 0xff6b6b)
+
 let NOMBRE = "Comprobantes Cinema"
-let APP = "Comprobantes Cinema.app"
-let BENEFICIOS = ["Un solo doble clic", "No necesita internet", "No pide contraseña"]
-let PASOS = ["Programa Comprobantes", "App en Aplicaciones y en el Dock", "PhotoCraft (para crear los comprobantes)"]
-// porcentaje al empezar y al terminar cada paso (0 = preparar) y segundos típicos: dentro de un paso la barra avanza sola
-let TRAMOS: [(Double, Double)] = [(0, 4), (4, 82), (82, 92), (92, 99)]
-let DURACION: [Double] = [0.6, 9, 1.2, 0.8]
+let APP = NOMBRE + ".app"
+let OCULTA = "." + APP
+let BINARIO = "Contents/MacOS/" + NOMBRE
+let PASOS = ["Comprobantes en Aplicaciones", "App en el Dock"]
+let NPASOS = 2
+// porcentaje al empezar y al terminar cada paso (0 = preparar) y segundos típicos: dentro de un paso la barra avanza sola hacia
+// su final sin llegar, así nunca se ve detenida; mientras copia, sigue los MB copiados
+let TRAMOS: [(Double, Double)] = [(0, 3), (3, 90), (90, 98)]
+let DURACION: [Double] = [0.5, 7, 0.8]
 
 let HOME = NSHomeDirectory()
 
@@ -38,14 +47,20 @@ func numeroVersion(_ v: String) -> Int {
 }
 
 func versionDe(_ app: String) -> String? {
-    NSDictionary(contentsOfFile: app + "/Contents/Info.plist")?["CFBundleShortVersionString"] as? String
+    guard let d = NSDictionary(contentsOfFile: app + "/Contents/Info.plist") else { return nil }   // (sin caché)
+    return d["CFBundleShortVersionString"] as? String
 }
 
+func esApp(_ ruta: String) -> Bool { FileManager.default.isExecutableFile(atPath: ruta + "/" + BINARIO) }
+
+// la instalada MÁS NUEVA (puede haber dos: la de /Applications y la de este usuario en ~/Applications)
 func appInstalada() -> String? {
-    for ruta in ["/Applications/" + APP, HOME + "/Applications/" + APP] where FileManager.default.fileExists(atPath: ruta) {
-        return ruta
+    var mejor: (ruta: String, v: Int)? = nil
+    for ruta in ["/Applications/" + APP, HOME + "/Applications/" + APP] where esApp(ruta) {
+        let v = numeroVersion(versionDe(ruta) ?? "0")
+        if mejor == nil || v > mejor!.v { mejor = (ruta, v) }
     }
-    return nil
+    return mejor?.ruta
 }
 
 @discardableResult
@@ -63,30 +78,55 @@ func ejecutar(_ programa: String, _ argumentos: [String]) -> (Int32, String) {
     return (p.terminationStatus, String(decoding: datos, as: UTF8.self))
 }
 
+func megas(_ ruta: String) -> Double {
+    let (st, salida) = ejecutar("/usr/bin/du", ["-sk", ruta])
+    guard st == 0, let kb = Double(salida.split(whereSeparator: { $0 == "\t" || $0 == " " }).first ?? "") else { return 0 }
+    return kb / 1024
+}
+
+func abrir(_ app: String) {
+    NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: app), configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
+}
+
+// el programa que trae el disco: oculto junto a esta app; para pruebas, dentro de ella; si macOS la trasladó, en el disco montado
+func buscarPaquete(_ version: String) -> String? {
+    let alLado = (Bundle.main.bundlePath as NSString).deletingLastPathComponent + "/" + OCULTA
+    if esApp(alLado) { return alLado }
+    let dentro = (Bundle.main.resourcePath ?? "") + "/" + APP
+    if esApp(dentro) { return dentro }
+    var otra: String? = nil
+    // (solo los discos «Comprobantes …»: mirar dentro de otros —externos, de red— podía pedir permiso o colgarse)
+    for v in (try? FileManager.default.contentsOfDirectory(atPath: "/Volumes")) ?? [] where v.hasPrefix("Comprobantes") {
+        let r = "/Volumes/" + v + "/" + OCULTA
+        guard esApp(r) else { continue }
+        if versionDe(r) == version { return r }
+        if otra == nil { otra = r }
+    }
+    return otra
+}
+
 // ---------------------------------------------------------------------------------------------------------------- avance
 final class Avance: ObservableObject {
     @Published var paso = 0
-    @Published var detalles = Array(repeating: [String](), count: 4)
-    @Published var avisos = Array(repeating: "", count: 4)
+    @Published var aviso = ""
     @Published var estado = "instalando"           // instalando | listo | error
     @Published var mensaje = ""
     @Published var valor: Double = 0
+    @Published var mbHecho: Double = 0
+    @Published var mbTotal: Double = 0
     var tPaso = Date()
-    var tEstado = Date()
 
     func evento(_ tipo: String, _ texto: String = "") {
         guard estado == "instalando" else { return }
         switch tipo {
         case "PASO":
-            if let n = Int(texto), n > paso { paso = n; tPaso = Date() }
-        case "OK":
-            if !texto.isEmpty { detalles[paso].append(texto.replacingOccurrences(of: HOME, with: "~")) }
+            if let n = Int(texto), n > paso { paso = n; tPaso = Date(); aviso = "" }
         case "AVISO":
-            if !texto.isEmpty { avisos[paso] = texto }
+            aviso = texto
         case "FALLO":
-            estado = "error"; mensaje = texto.isEmpty ? "Algo salió mal." : texto; tEstado = Date()
+            estado = "error"; mensaje = texto.isEmpty ? "Algo salió mal." : texto
         case "FIN":
-            estado = "listo"; tEstado = Date()
+            estado = "listo"
         default:
             break
         }
@@ -94,274 +134,169 @@ final class Avance: ObservableObject {
 
     func objetivo() -> Double {
         if estado == "listo" { return 100 }
-        let i = min(max(paso, 0), 3)
+        let i = min(max(paso, 0), NPASOS)
         let (a, b) = TRAMOS[i]
+        if i == 1 && mbTotal > 0 {                              // copiando: sigue los MB de verdad
+            return a + (b - a) * min(0.99, mbHecho / mbTotal)
+        }
         let k = Date().timeIntervalSince(tPaso)
         return a + (b - a) * min(1, 0.9 * (1 - exp(-k / DURACION[i])))
     }
 
     func avanzar(_ dt: Double) {
         let obj = objetivo()
-        valor += (obj - valor) * min(1, dt * (estado == "listo" ? 5 : 2.4))
+        valor += (obj - valor) * min(1, dt * (estado == "listo" ? 6 : 3))
     }
 }
 
 // ---------------------------------------------------------------------------------------------------------------- vista
 struct BotonPildora: ButtonStyle {
-    var principal = true
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 14, weight: principal ? .bold : .semibold))
+            .font(.system(size: 14, weight: .bold))
             .foregroundColor(.white)
-            .padding(.horizontal, 26).frame(height: 44)
-            .background(
-                Group {
-                    if principal {
-                        Capsule().fill(LinearGradient(colors: [CORAL, ROJO, NARANJA], startPoint: .leading, endPoint: .trailing))
-                    } else {
-                        Capsule().fill(Color.white.opacity(0.06)).overlay(Capsule().stroke(Color(hex: 0x4a3434), lineWidth: 1))
-                    }
-                }
-            )
+            .padding(.horizontal, 30).frame(height: 40)
+            .background(Capsule().fill(LinearGradient(colors: [ROJO, CORAL], startPoint: .leading, endPoint: .trailing)))
             .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }
 
+let ANCHO: CGFloat = 560, ALTO: CGFloat = 400
+
 struct VistaInstalador: View {
     @ObservedObject var av: Avance
     let version: String
-    let mac: String
     let icono: NSImage?
     let cerrar: () -> Void
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { ctx in
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { ctx in
             let t = ctx.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 0) {
-                heroe(t)
-                columna(t)
-                    .padding(.leading, 46).padding(.trailing, 44).padding(.top, 46).padding(.bottom, 34)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            ZStack(alignment: .top) {
+                LinearGradient(colors: [Color(hex: 0x1d1316), Color(hex: 0x0c0b0d)], startPoint: .topLeading,
+                               endPoint: UnitPoint(x: 0.75, y: 1))
+                Ellipse()
+                    .fill(RadialGradient(colors: [colorEstado.opacity(0.18 + 0.05 * sin(t * 1.6)), colorEstado.opacity(0)],
+                                         center: .center, startRadius: 0, endRadius: 220))
+                    .frame(width: 500, height: 400).offset(y: -130)
+                VStack(spacing: 0) {
+                    anillo(t).frame(width: 150, height: 150).padding(.top, 40)
+                    titulo.padding(.top, 18)
+                    detalle.padding(.top, 8).padding(.horizontal, 36)
+                    cifra.padding(.top, 6)
+                    puntos.padding(.top, 12)
+                    Spacer(minLength: 0)
+                    pie.padding(.bottom, 20)
+                }
+                .frame(width: ANCHO, height: ALTO)
             }
-            .frame(width: 900, height: 520)
-            .background(LinearGradient(colors: [Color(hex: 0x1b1515), Color(hex: 0x0c0909)], startPoint: .topLeading,
-                                       endPoint: .bottomTrailing))
+            .frame(width: ANCHO, height: ALTO)
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(colorBorde, lineWidth: 1.2))
         }
     }
 
-    var colorEstado: Color { av.estado == "listo" ? VERDE : (av.estado == "error" ? ERROR : ROJO) }
+    var colorEstado: Color { av.estado == "error" ? ERROR : (av.estado == "listo" ? VERDE : ROJO) }
     var colorBorde: Color {
-        av.estado == "listo" ? VERDE.opacity(0.6) : (av.estado == "error" ? ERROR.opacity(0.6) : Color(hex: 0x3d2a2a))
+        av.estado == "listo" ? VERDE.opacity(0.6) : (av.estado == "error" ? ERROR.opacity(0.6) : Color(hex: 0x3a2a2e))
     }
 
-    // ---- panel de la izquierda
-    func heroe(_ t: Double) -> some View {
-        ZStack {
-            LinearGradient(colors: [Color(hex: 0x4c0f13), Color(hex: 0x25110f), Color(hex: 0x120c0c)], startPoint: .topLeading,
-                           endPoint: .bottomTrailing)
-            luz(ROJO, 0.25, 0.20, 264, 0.21, 0, t)
-            luz(NARANJA, 0.85, 0.80, 280, 0.17, 1, t)
-            luz(CORAL, 0.55, 0.50, 182, 0.13, 2, t)
-            VStack(spacing: 0) {
-                Spacer().frame(height: 70)
-                emblema(t)
-                Text("Comprobantes").font(.system(size: 28, weight: .bold)).foregroundColor(TEXTO).padding(.top, 8)
-                Text("CINEMA PRODUCTIONS").font(.system(size: 10, weight: .bold)).tracking(2.5)
-                    .foregroundColor(TEXTO.opacity(0.6)).padding(.top, 4)
-                Text("INSTALADOR  ·  v\(version)").font(.system(size: 11, weight: .bold)).tracking(3)
-                    .foregroundColor(CORAL.opacity(0.95)).padding(.top, 10)
-                Spacer()
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(BENEFICIOS, id: \.self) { b in
-                        HStack(spacing: 10) {
-                            Circle().fill(CORAL.opacity(0.2)).frame(width: 20, height: 20)
-                                .overlay(Image(systemName: "checkmark").font(.system(size: 9, weight: .heavy)).foregroundColor(CORAL))
-                            Text(b).font(.system(size: 13, weight: .semibold)).foregroundColor(TEXTO.opacity(0.88))
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 40).padding(.bottom, 34)
-            }
-        }
-        .frame(width: 330, height: 520)
-        .clipped()
-        .overlay(Rectangle().fill(LinearGradient(colors: [CORAL.opacity(0), CORAL.opacity(0.35), CORAL.opacity(0)], startPoint: .top,
-                                                 endPoint: .bottom)).frame(width: 1).padding(.vertical, 24),
-                 alignment: .trailing)
-    }
-
-    func luz(_ c: Color, _ fx: Double, _ fy: Double, _ r: Double, _ vel: Double, _ i: Double, _ t: Double) -> some View {
-        Circle()
-            .fill(RadialGradient(colors: [c.opacity(0.26), c.opacity(0)], center: .center, startRadius: 0, endRadius: r))
-            .frame(width: r * 2, height: r * 2)
-            .position(x: 330 * (fx + 0.12 * sin(t * vel * 2 + i)), y: 520 * (fy + 0.08 * cos(t * vel * 1.6 + i * 2)))
-    }
-
-    func emblema(_ t: Double) -> some View {
-        let instalando = av.estado == "instalando"
-        let ang = (t * (instalando ? 300 : 60)).truncatingRemainder(dividingBy: 360)
-        let k = Date().timeIntervalSince(av.tEstado)
-        let pulso = instalando ? 0.75 + 0.25 * sin(t * 2.2) : 1 + 0.8 * exp(-k * 2.2)
-        let paradas: [Gradient.Stop]
-        if instalando {
-            paradas = [Gradient.Stop(color: CORAL, location: 0), Gradient.Stop(color: ROJO.opacity(0.7), location: 0.18),
-                       Gradient.Stop(color: NARANJA.opacity(0), location: 0.38), Gradient.Stop(color: NARANJA.opacity(0), location: 0.7),
-                       Gradient.Stop(color: NARANJA.opacity(0.9), location: 1)]
-        } else {
-            paradas = [Gradient.Stop(color: colorEstado, location: 0), Gradient.Stop(color: colorEstado.opacity(0.55), location: 0.5),
-                       Gradient.Stop(color: colorEstado, location: 1)]
-        }
+    // ---- el logo dentro del anillo de progreso
+    func anillo(_ t: Double) -> some View {
+        let frac = av.estado == "listo" ? 1 : max(0.02, min(1, av.valor / 100))
+        let colores: [Color] = av.estado == "error" ? [Color(hex: 0xc2444a), ERROR]
+            : (av.estado == "listo" ? [VERDE, MENTA, VERDE] : [ROJO, CORAL, DORADO])
+        let ang = (frac * 360 - 90) * .pi / 180
         return ZStack {
-            Circle().fill(RadialGradient(colors: [colorEstado.opacity(min(1, 0.34 * pulso)), colorEstado.opacity(0)],
-                                         center: .center, startRadius: 0, endRadius: 138))
-                .frame(width: 276, height: 276)
-            Circle().fill(Color(hex: 0x140c0c, a: 0.94)).frame(width: 120, height: 120)
-                .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
-            Circle()
-                .stroke(AngularGradient(gradient: Gradient(stops: paradas), center: .center),
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .frame(width: 138, height: 138)
-                .rotationEffect(.degrees(ang))
-            ForEach(0..<3, id: \.self) { i in
-                let a = (-ang * 0.55 + Double(i) * 120) * .pi / 180
-                Circle().fill((instalando ? [NARANJA, CORAL, ROJO][i] : colorEstado).opacity(0.8)).frame(width: 6, height: 6)
-                    .offset(x: cos(a) * 84, y: sin(a) * 84)
+            Circle().stroke(Color.white.opacity(0.08), lineWidth: 5).frame(width: 145, height: 145)
+            Circle().trim(from: 0, to: frac)
+                .stroke(AngularGradient(gradient: Gradient(colors: colores), center: .center,
+                                        startAngle: .degrees(0), endAngle: .degrees(360 * frac)),
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .frame(width: 145, height: 145)
+            if av.estado == "instalando" {                       // la punta, con brillo que late
+                Circle().fill(CORAL).frame(width: 12, height: 12)
+                    .shadow(color: CORAL.opacity(0.55 + 0.3 * sin(t * 4)), radius: 7)
+                    .offset(x: cos(ang) * 72.5, y: sin(ang) * 72.5)
             }
-            Group {
-                if let icono = icono {
-                    Image(nsImage: icono).resizable().interpolation(.high).frame(width: 96, height: 96)
-                }
+            if let icono = icono {
+                Image(nsImage: icono).resizable().interpolation(.high).frame(width: 86, height: 86)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .offset(y: av.estado == "instalando" ? sin(t * 1.7) * 2 : 0)
             }
-            .offset(y: sin(t * 1.7) * 2.5)
-            if !instalando {
-                Circle().fill(colorEstado).frame(width: 34, height: 34)
-                    .overlay(Circle().stroke(Color(hex: 0x140c0c), lineWidth: 3))
+            if av.estado != "instalando" {
+                Circle().fill(colorEstado).frame(width: 32, height: 32)
+                    .overlay(Circle().stroke(Color(hex: 0x120d0f), lineWidth: 3))
                     .overlay(av.estado == "listo"
-                             ? AnyView(Image(systemName: "checkmark").font(.system(size: 15, weight: .heavy)).foregroundColor(.white))
-                             : AnyView(Text("!").font(.system(size: 20, weight: .black)).foregroundColor(.white)))
-                    .offset(x: 41, y: 41)
+                             ? AnyView(Image(systemName: "checkmark").font(.system(size: 14, weight: .heavy)).foregroundColor(.white))
+                             : AnyView(Text("!").font(.system(size: 19, weight: .black)).foregroundColor(.white)))
+                    .offset(x: 40, y: 40)
             }
         }
-        .frame(width: 180, height: 180)
     }
 
-    // ---- columna de la derecha
-    var titulo: String {
-        av.estado == "listo" ? "¡Comprobantes está listo!" : (av.estado == "error" ? "No se pudo instalar" : "Instalando Comprobantes")
-    }
-    var subtitulo: String {
-        av.estado == "listo" ? "Se instaló la versión \(version). Lo encuentras en Aplicaciones, en el Dock y en Launchpad."
-            : (av.estado == "error" ? av.mensaje : "Versión \(version) para \(mac)")
-    }
-    var accion: String {
-        if av.estado == "listo" { return "Instalación completa" }
-        if av.estado == "error" { return "Se detuvo en: \(PASOS[max(0, av.paso - 1)])" }
-        if av.paso == 0 { return "Preparando el instalador…" }
-        return "Paso \(av.paso) de \(PASOS.count) · \(PASOS[av.paso - 1])"
-    }
-
-    func columna(_ t: Double) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(titulo).font(.system(size: 30, weight: .bold)).foregroundColor(TEXTO).lineLimit(1)
-            Text(subtitulo).font(.system(size: 14)).foregroundColor(av.estado == "error" ? ERROR : SUAVE)
-                .lineLimit(2).frame(height: 40, alignment: .topLeading).padding(.top, 6)
-            HStack {
-                Text(accion).font(.system(size: 13, weight: .semibold)).foregroundColor(SUAVE).lineLimit(1)
-                Spacer()
-                Text("\(Int(av.valor.rounded())) %").font(.system(size: 15, weight: .bold)).monospacedDigit().foregroundColor(TEXTO)
+    // ---- textos
+    var titulo: some View {
+        Group {
+            if av.estado == "listo" {
+                Text("¡Comprobantes está listo!").foregroundColor(TEXTO)
+            } else if av.estado == "error" {
+                Text("No se pudo instalar").foregroundColor(TEXTO)
+            } else {
+                Text("Instalando ").foregroundColor(TEXTO) + Text("Comprobantes").foregroundColor(CORAL)
+                    + Text(" \(version)").foregroundColor(TEXTO)
             }
-            .padding(.top, 14)
-            barra(t).padding(.top, 10)
-            VStack(spacing: 0) {
-                ForEach(1...PASOS.count, id: \.self) { i in fila(i, t) }
-            }
-            .padding(.top, 22)
-            Spacer(minLength: 0)
-            pie()
         }
+        .font(.system(size: 24, weight: .bold)).lineLimit(1)
     }
 
-    var rellenoBarra: LinearGradient {
-        let colores: [Color]
+    var detalle: some View {
+        var texto: String
+        var color = SUAVE
         if av.estado == "listo" {
-            colores = [Color(hex: 0x23a86e), Color(hex: 0x5fd6a0)]
+            texto = "Abriendo Comprobantes…"; color = VERDE
         } else if av.estado == "error" {
-            colores = [Color(hex: 0xc2444a), ERROR]
+            texto = av.mensaje; color = ERROR
+        } else if av.paso == 0 {
+            texto = "Preparando…"
+        } else if av.paso == 1 {
+            texto = av.mbTotal > 0 ? "Copiando a Aplicaciones · \(Int(av.mbHecho)) de \(Int(av.mbTotal)) MB" : "Copiando a Aplicaciones…"
         } else {
-            colores = [CORAL, ROJO, NARANJA]
+            texto = PASOS[min(av.paso, NPASOS) - 1]
         }
-        return LinearGradient(colors: colores, startPoint: .leading, endPoint: .trailing)
+        if av.estado == "instalando" && !av.aviso.isEmpty { texto = av.aviso; color = AMBAR.opacity(0.9) }
+        return Text(texto).font(.system(size: 14, weight: .medium)).foregroundColor(color)
+            .multilineTextAlignment(.center).lineLimit(2).frame(maxWidth: .infinity)
     }
 
-    func barra(_ t: Double) -> some View {
-        GeometryReader { g in
-            let w: CGFloat = max(10, g.size.width * CGFloat(min(100, av.valor)) / 100)
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.07)).frame(height: 10)
-                Capsule().fill(rellenoBarra).frame(width: w, height: 10)
-            }
-            .frame(height: 10)
-            .overlay(alignment: .leading) {
-                if av.estado == "instalando" {
-                    Circle().fill(RadialGradient(colors: [NARANJA.opacity(0.55), NARANJA.opacity(0)], center: .center, startRadius: 0,
-                                                 endRadius: 16))
-                        .frame(width: 32, height: 32).offset(x: w - 19)
-                }
+    var cifra: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if av.estado != "error" {
+                Text("\(Int(av.valor.rounded())) %").font(.system(size: 40, weight: .bold)).monospacedDigit().foregroundColor(TEXTO)
             }
         }
-        .frame(height: 10)
+        .frame(height: 50)
     }
 
-    func fila(_ i: Int, _ t: Double) -> some View {
-        let hecho = av.estado == "listo" || i < av.paso
-        let actual = av.estado != "listo" && i == av.paso
-        var detalle = "", colorDetalle = TENUE
-        if !av.avisos[i].isEmpty {
-            detalle = av.avisos[i]; colorDetalle = AMBAR.opacity(0.9)
-        } else if hecho && !av.detalles[i].isEmpty {
-            detalle = av.detalles[i].suffix(2).joined(separator: " · ")
-        }
-        let nombre = i == 1 ? "Programa Comprobantes \(version)" : PASOS[i - 1]
-        return HStack(spacing: 12) {
-            ZStack {
-                if hecho && av.avisos[i].isEmpty {
-                    Circle().fill(LinearGradient(colors: [CORAL, ROJO], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy)).foregroundColor(.white)
-                } else if hecho {
-                    Circle().fill(AMBAR)
-                    Text("!").font(.system(size: 13, weight: .black)).foregroundColor(Color(hex: 0x2a1d08))
-                } else if actual && av.estado == "error" {
-                    Circle().fill(ERROR)
-                    Text("!").font(.system(size: 13, weight: .black)).foregroundColor(.white)
-                } else if actual {
-                    Circle().stroke(CORAL.opacity(0.22), lineWidth: 2.4).frame(width: 19, height: 19)
-                    Circle().trim(from: 0, to: 0.28).stroke(CORAL, style: StrokeStyle(lineWidth: 2.6, lineCap: .round))
-                        .frame(width: 19, height: 19).rotationEffect(.degrees((t * 420).truncatingRemainder(dividingBy: 360)))
-                } else {
-                    Circle().stroke(TENUE.opacity(0.7), lineWidth: 1.6).frame(width: 18, height: 18)
-                }
+    var puntos: some View {
+        HStack(spacing: 10) {
+            ForEach(1...NPASOS, id: \.self) { i in
+                let hecho = av.estado == "listo" || i < av.paso
+                let actual = av.estado != "listo" && i == max(1, av.paso)
+                Capsule()
+                    .fill(actual ? (av.estado == "error" ? ERROR : CORAL) : (hecho ? VERDE.opacity(0.8) : SUAVE.opacity(0.35)))
+                    .frame(width: actual ? 22 : 6, height: 6)
             }
-            .frame(width: 22, height: 22)
-            Text(nombre).font(.system(size: 14, weight: actual ? .semibold : .regular))
-                .foregroundColor(hecho || actual ? TEXTO : TENUE).lineLimit(1).layoutPriority(1)
-            Spacer(minLength: 12)
-            Text(detalle).font(.system(size: 12)).foregroundColor(colorDetalle).lineLimit(1).truncationMode(.tail)
         }
-        .frame(height: 38)
     }
 
-    @ViewBuilder func pie() -> some View {
+    @ViewBuilder var pie: some View {
         if av.estado == "error" {
-            HStack(spacing: 12) {
-                Button("Cerrar", action: cerrar).buttonStyle(BotonPildora(principal: true))
-                Text("Ábrelo otra vez; si se repite, avísanos.").font(.system(size: 12)).foregroundColor(TENUE).padding(.leading, 6)
-            }
-        } else if av.estado == "listo" {
-            Text("Abriendo Comprobantes…").font(.system(size: 14, weight: .semibold)).foregroundColor(VERDE)
+            Button("Cerrar", action: cerrar).buttonStyle(BotonPildora())
         } else {
-            Text("Puedes seguir usando tu Mac. Al terminar, Comprobantes se abre solo.").font(.system(size: 13)).foregroundColor(TENUE)
+            Text("Sin contraseña  ·  Se abre solo al terminar  ·  Mac con Apple Silicon")
+                .font(.system(size: 12, weight: .medium)).foregroundColor(TENUE)
         }
     }
 }
@@ -378,27 +313,25 @@ final class Instalador: NSObject, NSApplicationDelegate {
     var reloj: Timer?
     var antes = Date()
     var terminado = false
+    var copiando = ""                 // «….app.nuevo» mientras se copia (se borra si se cierra a medias)
     var demo: [(Double, String, String)] = []
     var tDemo = Date()
-    var destino = ""
     let args = CommandLine.arguments
     var esDemo: Bool { args.contains("--demo") || args.contains("--demo-error") }
     lazy var recursos = Bundle.main.resourcePath ?? "."
-    lazy var paquete = recursos + "/" + APP
-    lazy var version = versionDe(paquete) ?? ((Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?")
+    lazy var version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        // ya instalado (igual o más nuevo): solo se abre el programa
-        if !esDemo, let app = appInstalada(), let inst = versionDe(app), numeroVersion(inst) >= numeroVersion(version) {
-            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: app), configuration: NSWorkspace.OpenConfiguration()) { _, _ in
-                DispatchQueue.main.async { self.expulsarDisco(); NSApp.terminate(nil) }
-            }
+        // ya instalado (igual o más nuevo): solo se abre el programa (y se expulsa el disco, que ya no hace falta)
+        if !esDemo, let app = appInstalada(), numeroVersion(versionDe(app) ?? "0") >= numeroVersion(version) {
+            abrir(app)
+            expulsarDisco()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { NSApp.terminate(nil) }
             return
         }
-        let mac = "Mac con Apple Silicon"   // regla: solo Apple Silicon
         let icono = NSImage(contentsOfFile: recursos + "/icono.png") ?? NSApp.applicationIconImage
-        let vista = VistaInstalador(av: av, version: version, mac: mac, icono: icono, cerrar: { NSApp.terminate(nil) })
-        let w = VentanaSinMarco(contentRect: NSRect(x: 0, y: 0, width: 900, height: 520), styleMask: [.borderless],
+        let vista = VistaInstalador(av: av, version: version, icono: icono, cerrar: { NSApp.terminate(nil) })
+        let w = VentanaSinMarco(contentRect: NSRect(x: 0, y: 0, width: ANCHO, height: ALTO), styleMask: [.borderless],
                                 backing: .buffered, defer: false)
         w.isOpaque = false
         w.backgroundColor = .clear
@@ -412,12 +345,14 @@ final class Instalador: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         if esDemo { empezarDemo() } else { empezar() }
         antes = Date()
-        reloj = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in self?.tic() }
+        reloj = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in self?.tic() }
     }
 
-    func applicationShouldTerminate(_ s: NSApplication) -> NSApplication.TerminateReply {
-        // no se cierra a media instalación (sin ventana = ya estaba instalado y solo se abrió el programa)
-        (ventana != nil && av.estado == "instalando" && !esDemo) ? .terminateCancel : .terminateNow
+    // ⌘Q siempre: la copia a medias (….app.nuevo) se borra y la instalada sigue como estaba
+    func applicationShouldTerminate(_ s: NSApplication) -> NSApplication.TerminateReply { .terminateNow }
+
+    func applicationWillTerminate(_ n: Notification) {
+        if !copiando.isEmpty { try? FileManager.default.removeItem(atPath: copiando) }
     }
 
     func enviar(_ tipo: String, _ texto: String = "") {
@@ -428,43 +363,64 @@ final class Instalador: NSObject, NSApplicationDelegate {
     func empezar() {
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             let fm = FileManager.default
-            Thread.sleep(forTimeInterval: 0.4)
-            // 1) programa en Aplicaciones
+            Thread.sleep(forTimeInterval: 0.3)
             enviar("PASO", "1")
-            guard fm.fileExists(atPath: paquete) else {
-                enviar("FALLO", "Falta el programa dentro del instalador. Descarga el instalador otra vez."); return
+            guard let paquete = buscarPaquete(version) else {
+                enviar("FALLO", "No encontré el programa en el disco. Vuelve a abrir el .dmg descargado."); return
             }
             ejecutar("/usr/bin/pkill", ["-f", APP + "/Contents/MacOS/"])        // si estaba abierto (actualización)
+            // /Applications si se puede escribir ahí (y cambiar la anterior); si no, ~/Applications: nunca pide contraseña
             var carpeta = "/Applications"
-            if !fm.isWritableFile(atPath: carpeta) {
+            let previa = carpeta + "/" + APP
+            if !fm.isWritableFile(atPath: carpeta) || (fm.fileExists(atPath: previa) && !fm.isWritableFile(atPath: previa)) {
                 carpeta = HOME + "/Applications"
                 try? fm.createDirectory(atPath: carpeta, withIntermediateDirectories: true)
             }
-            destino = carpeta + "/" + APP
-            if fm.fileExists(atPath: destino) { try? fm.removeItem(atPath: destino) }
-            let (st, salida) = ejecutar("/usr/bin/ditto", ["--noqtn", paquete, destino])
-            guard st == 0, fm.fileExists(atPath: destino) else {
-                enviar("FALLO", "No se pudo copiar a Aplicaciones: " + salida.trimmingCharacters(in: .whitespacesAndNewlines)); return
+            let destino = carpeta + "/" + APP
+            let nuevo = destino + ".nuevo"
+            try? fm.removeItem(atPath: nuevo)
+            let total = megas(paquete)
+            DispatchQueue.main.async { self.av.mbTotal = total }
+            copiando = nuevo
+            var copiado = false
+            DispatchQueue.global(qos: .utility).async { [self] in            // los MB copiados, para el anillo
+                while !copiado {
+                    let hecho = megas(nuevo)
+                    DispatchQueue.main.async { self.av.mbHecho = hecho }
+                    Thread.sleep(forTimeInterval: 0.35)
+                }
             }
-            enviar("OK", destino)
-            // 2) Dock
+            let (st, salida) = ejecutar("/usr/bin/ditto", ["--noqtn", paquete, nuevo])
+            copiado = true
+            guard st == 0, esApp(nuevo) else {
+                try? fm.removeItem(atPath: nuevo); copiando = ""
+                enviar("FALLO", "No se pudo copiar a Aplicaciones: " + salida.trimmingCharacters(in: .whitespacesAndNewlines))
+                return
+            }
+            DispatchQueue.main.async { self.av.mbHecho = total }
+            if fm.fileExists(atPath: destino) {
+                do { try fm.removeItem(atPath: destino) } catch {
+                    try? fm.removeItem(atPath: nuevo); copiando = ""
+                    enviar("FALLO", "No se pudo reemplazar la versión anterior: ciérrala y vuelve a intentar."); return
+                }
+            }
+            do { try fm.moveItem(atPath: nuevo, toPath: destino) } catch {
+                copiando = ""
+                enviar("FALLO", "No se pudo terminar de copiar: " + error.localizedDescription); return
+            }
+            copiando = ""
+            ejecutar("/usr/bin/xattr", ["-dr", "com.apple.quarantine", destino])
+            // 2) el Dock
             enviar("PASO", "2")
             let (_, dock) = ejecutar("/usr/bin/defaults", ["read", "com.apple.dock", "persistent-apps"])
-            if dock.lowercased().contains("comprobantes") {
-                enviar("OK", "Ya estaba en el Dock")
-            } else {
+            if !dock.contains(APP) {
                 let entrada = "<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>\(destino)</string>"
                     + "<key>_CFURLStringType</key><integer>0</integer></dict></dict></dict>"
                 let (sd, _) = ejecutar("/usr/bin/defaults", ["write", "com.apple.dock", "persistent-apps", "-array-add", entrada])
                 ejecutar("/usr/bin/killall", ["Dock"])
-                if sd == 0 { enviar("OK", "Fijado en el Dock") } else { enviar("AVISO", "No se pudo fijar en el Dock (arrástralo tú)") }
+                if sd != 0 { enviar("AVISO", "No se pudo fijar en el Dock: arrástralo tú desde Aplicaciones") }
             }
-            // 3) PhotoCraft
-            enviar("PASO", "3")
-            let candidatos = (try? fm.contentsOfDirectory(atPath: "/Applications")) ?? []
-            let hay = candidatos.contains { $0.lowercased().contains("photocraft") || $0.lowercased().contains("artcraft") }
-            if hay { enviar("OK", "PhotoCraft encontrado") } else { enviar("AVISO", "Falta PhotoCraft: instálalo para crear los comprobantes") }
-            Thread.sleep(forTimeInterval: 0.5)
+            Thread.sleep(forTimeInterval: 0.3)
             enviar("FIN", version)
         }
     }
@@ -477,23 +433,36 @@ final class Instalador: NSObject, NSApplicationDelegate {
         av.avanzar(dt)
         if av.estado == "listo" && !terminado && !esDemo {
             terminado = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.abrirYSalir() }
+            // Comprobantes YA: un instante para ver el ✓ y se abre; el instalador se cierra y el disco se expulsa
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self.abrirYSalir() }
         }
     }
 
-    // ---- al terminar: abre el programa, el instalador se cierra y el disco se expulsa
     func abrirYSalir() {
-        if let app = appInstalada() {
-            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: app), configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
-        }
+        if let app = appInstalada() { abrir(app) }
         expulsarDisco()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { NSApp.terminate(nil) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { NSApp.terminate(nil) }
     }
 
+    // el disco del que vino, cuando este instalador ya se cerró (un proceso aparte que espera; si sigue ocupado, insiste y
+    // al final a la fuerza: con la ventana del disco abierta en el Finder, el primer intento sale «ocupado»)
     func expulsarDisco() {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
-        p.arguments = ["-c", "sleep 3; for v in /Volumes/Comprobantes*; do [ -d \"$v/Instalar Comprobantes.app\" ] && /usr/bin/hdiutil detach \"$v\" -quiet; done; exit 0"]
+        p.arguments = ["-c", """
+            sleep 2
+            for i in 1 2 3 4 5; do
+              listo=1
+              for v in /Volumes/Comprobantes*; do
+                [ -d "$v/Instalar Comprobantes.app" ] || continue
+                /usr/bin/hdiutil detach "$v" -quiet || listo=0
+              done
+              [ $listo = 1 ] && exit 0
+              sleep 2
+            done
+            for v in /Volumes/Comprobantes*; do [ -d "$v/Instalar Comprobantes.app" ] && /usr/bin/hdiutil detach "$v" -force -quiet; done
+            exit 0
+            """]
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
@@ -503,16 +472,18 @@ final class Instalador: NSObject, NSApplicationDelegate {
     // ---- simulación (--demo / --demo-error)
     func empezarDemo() {
         tDemo = Date()
-        demo = [(0.4, "PASO", "1"), (2.6, "OK", "/Applications/" + APP), (2.8, "PASO", "2"), (3.6, "OK", "Fijado en el Dock")]
+        av.mbTotal = 340
+        demo = [(0.3, "PASO", "1")]
         if args.contains("--demo-error") {
-            demo.append((4.2, "FALLO", "No se pudo copiar a Aplicaciones: no hay espacio en el disco."))
+            demo.append((2.6, "FALLO", "No se pudo copiar a Aplicaciones: no hay espacio en el disco."))
         } else {
-            demo += [(3.8, "PASO", "3"), (4.4, "AVISO", "Falta PhotoCraft: instálalo para crear los comprobantes"), (5.0, "FIN", version)]
+            demo += [(3.4, "PASO", "2"), (4.2, "FIN", version)]
         }
     }
 
     func alimentarDemo() {
         let k = Date().timeIntervalSince(tDemo)
+        if av.paso == 1 && av.estado == "instalando" { av.mbHecho = min(av.mbTotal, max(0, (k - 0.3) / 3.0 * av.mbTotal)) }
         while let e = demo.first, e.0 <= k {
             demo.removeFirst()
             av.evento(e.1, e.2)

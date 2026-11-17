@@ -270,9 +270,10 @@ class ZonaCaptura(QWidget):
             p.end()
             return
         if self.ruta and self._mini:
-            alto = r.height() - 20
+            bajo = r.height() < 80                       # recuadro apretado: ✓ dentro de la miniatura, 2 renglones
+            alto = r.height() - (14 if bajo else 20)
             ancho = min(alto * self._mini.width() / max(self._mini.height(), 1), r.width() * 0.4)
-            caja = QRectF(r.left() + 10, r.top() + 10, ancho, alto)
+            caja = QRectF(r.left() + (8 if bajo else 10), r.top() + (7 if bajo else 10), ancho, alto)
             t = self._t_mini
             if t < 1:                                 # entra creciendo de 92 % a 100 %
                 k = 0.92 + 0.08 * t
@@ -285,29 +286,39 @@ class ZonaCaptura(QWidget):
             p.setClipPath(camino)
             p.drawPixmap(caja, self._mini, QRectF(self._mini.rect()))
             p.restore()
+            p.setPen(QPen(estilo.c("borde2"), 1))                    # borde fino: una captura blanca no se pierde
+            p.setBrush(Qt.NoBrush)
+            p.drawRoundedRect(caja.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
             p.setPen(Qt.NoPen)
             p.setBrush(QColor(estilo.VERDE))
-            ck = QRectF(caja.right() - 12, caja.top() - 6, 20, 20)
+            d = 16 if bajo else 20
+            ck = (QRectF(caja.right() - d + 4, caja.bottom() - d + 4, d, d) if bajo
+                  else QRectF(caja.right() - 12, caja.top() - 6, d, d))
             p.drawEllipse(ck)
             p.setPen(QPen(QColor("white"), 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-            p.drawPolyline([QPointF(ck.left() + 5.5, ck.center().y()), QPointF(ck.left() + 8.8, ck.bottom() - 6),
-                            QPointF(ck.right() - 5, ck.top() + 6.5)])
-            x = caja.right() + 18
-            f.setPixelSize(14)
+            p.drawPolyline([QPointF(ck.left() + d * 0.27, ck.center().y()), QPointF(ck.left() + d * 0.44, ck.bottom() - d * 0.3),
+                            QPointF(ck.right() - d * 0.25, ck.top() + d * 0.32)])
+            x = caja.right() + (14 if bajo else 18)
+            f.setPixelSize(13 if bajo else 14)
             f.setWeight(QFont.DemiBold)
             p.setFont(f)
             p.setPen(estilo.c("texto"))
             cy = r.center().y()
-            p.drawText(QRectF(x, cy - 30, r.right() - x - 10, 20), Qt.AlignLeft | Qt.AlignVCenter,
+            p.drawText(QRectF(x, cy - (20 if bajo else 30), r.right() - x - 10, 20), Qt.AlignLeft | Qt.AlignVCenter,
                        "Captura del pago lista")
             f.setPixelSize(12)
             f.setWeight(QFont.Normal)
             p.setFont(f)
             p.setPen(estilo.c("texto3"))
-            nombre = p.fontMetrics().elidedText(Path(self.ruta).name, Qt.ElideMiddle, int(r.right() - x - 10))
-            p.drawText(QRectF(x, cy - 8, r.right() - x - 10, 18), Qt.AlignLeft | Qt.AlignVCenter, nombre)
-            p.drawText(QRectF(x, cy + 10, r.right() - x - 10, 18), Qt.AlignLeft | Qt.AlignVCenter,
-                       f"Clic para cambiarla · {CTRL}V para pegar otra")
+            if bajo:
+                linea = f"{Path(self.ruta).name}  ·  clic para cambiarla"
+                p.drawText(QRectF(x, cy + 1, r.right() - x - 10, 18), Qt.AlignLeft | Qt.AlignVCenter,
+                           p.fontMetrics().elidedText(linea, Qt.ElideMiddle, int(r.right() - x - 10)))
+            else:
+                nombre = p.fontMetrics().elidedText(Path(self.ruta).name, Qt.ElideMiddle, int(r.right() - x - 10))
+                p.drawText(QRectF(x, cy - 8, r.right() - x - 10, 18), Qt.AlignLeft | Qt.AlignVCenter, nombre)
+                p.drawText(QRectF(x, cy + 10, r.right() - x - 10, 18), Qt.AlignLeft | Qt.AlignVCenter,
+                           f"Clic para cambiarla · {CTRL}V para pegar otra")
         elif r.height() < 80:      # recuadro bajo: ícono y texto en un solo renglón
             lado = 22
             color_ico = QColor(estilo.ROJO) if self.error else estilo.c("texto2")
@@ -531,7 +542,7 @@ class TarjetaPaquete(Tarjeta):
             f.setPixelSize(9)
             f.setWeight(QFont.Bold)
             p.setFont(f)
-            texto = "MÁS VENDIDO" if libre >= 82 else ("TOP" if libre >= 34 else "")
+            texto = "MÁS VENDIDO" if libre >= 82 else ""      # (sin abreviar: si no cabe, no se pone)
             if texto:
                 ancho = p.fontMetrics().horizontalAdvance(texto) + 12
                 caja = QRectF(w - ancho - 10, fila.center().y() - 8, ancho, 16)
@@ -544,7 +555,7 @@ class TarjetaPaquete(Tarjeta):
             f.setPixelSize(12)
             f.setWeight(QFont.Normal)
             p.setFont(f)
-            texto = f"{self.servicios} servicios" if libre >= 70 else (f"{self.servicios} serv." if libre >= 44 else "")
+            texto = f"{self.servicios} servicios" if libre >= 70 else ""
             p.setPen(estilo.c("texto3"))
             p.drawText(QRectF(0, fila.top(), w - 12, fila.height()), Qt.AlignRight | Qt.AlignVCenter, texto)
         p.end()
@@ -617,6 +628,21 @@ class BarraPago(QWidget):
         p.end()
 
 
+def servicio_legible(titulo, detalle=""):
+    """Texto de un servicio para la pantalla (el de la plantilla PSD no cambia):
+    «Cobertura en» + «(Maquillaje - ceremonia - fiesta)» → «Cobertura», «Maquillaje, ceremonia y fiesta»."""
+    titulo = titulo.strip()
+    if titulo.lower().endswith(" en"):
+        titulo = titulo[:-3]
+    detalle = (detalle or "").strip().strip("()").strip()
+    partes = [x.strip() for x in detalle.split(" - ") if x.strip()]
+    if len(partes) > 1:
+        detalle = ", ".join(partes[:-1]) + " y " + partes[-1]
+    if detalle:
+        detalle = detalle[0].upper() + detalle[1:]
+    return titulo, detalle
+
+
 def etiqueta_estado(estado):
     """Píldora de color para Reservado / Abonado / Pagado."""
     return Pildora(estado, COLOR_ESTADO.get(estado, "#999999"))
@@ -677,7 +703,10 @@ class MiniGrafico(QWidget):
                 if alto <= 0:
                     continue
                 p.setPen(Qt.NoPen)
-                p.setBrush(color if i == n - 1 else estilo.alfa(color, 110))
+                if v == 0:                                       # mes sin comprobantes: apenas una marca
+                    p.setBrush(estilo.c("sup3"))
+                else:
+                    p.setBrush(color if i == n - 1 else estilo.alfa(color, 110))
                 p.drawRoundedRect(QRectF(i * (ancho + 3), h - alto, ancho, alto), 1.5, 1.5)
         else:
             n = len(self.serie)
@@ -861,8 +890,9 @@ class Pasos(QWidget):
                 x0, x1 = x + 8, x + unir - 8
                 p.setPen(QPen(estilo.c("borde2"), 1.4))
                 p.drawLine(QPointF(x0, cy), QPointF(x1, cy))
-                if ok:                                          # la línea verde avanza al completarse
-                    tt = self._t[i] if hasattr(self, f"_ani{i}") else 1.0
+                if ok and self.completos[i + 1]:                # verde solo si los dos pasos que une están listos
+                    tt = min(self._t[i] if hasattr(self, f"_ani{i}") else 1.0,
+                             self._t[i + 1] if hasattr(self, f"_ani{i + 1}") else 1.0)
                     p.setPen(QPen(QColor(estilo.VERDE), 1.6))
                     p.drawLine(QPointF(x0, cy), QPointF(x0 + (x1 - x0) * tt, cy))
                 x += unir
@@ -940,5 +970,6 @@ class Bloque(Tarjeta):
             self.estado.poner("Listo", estilo.VERDE)
             self.resaltar(False)
         else:
-            self.estado.poner(("Falta " + falta) if falta else "Pendiente", estilo.AMBAR if falta else None)
+            verbo = "Faltan " if falta and falta[0].isdigit() else "Falta "
+            self.estado.poner((verbo + falta) if falta else "Pendiente", estilo.AMBAR if falta else None)
         self.update()

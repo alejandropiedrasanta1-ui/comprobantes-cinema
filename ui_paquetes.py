@@ -1,7 +1,7 @@
 """Pantalla «Paquetes»: lo que incluye cada paquete y sus precios (editables)."""
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (CaptionLabel, FluentIcon as FIF, PrimaryPushButton, PushButton,
                             SmoothScrollArea, StrongBodyLabel, SubtitleLabel, TitleLabel, ToolTipFilter)
 
@@ -9,11 +9,13 @@ import estilo
 import motor
 import rutas
 from estilo import Icono, Pildora, Separador, Tarjeta
-from ui_comun import COLOR_PAQUETE, ICONO_PAQUETE, NOMBRES_PAQUETE, Monto, Rejilla, abrir, aviso, q
+from ui_comun import (COLOR_PAQUETE, ICONO_PAQUETE, NOMBRES_PAQUETE, Monto, Rejilla, abrir, aviso, q,
+                      servicio_legible)
 
 
 def _servicio(titulo, detalle, icono_s, color):
-    """Fila «✓ [ícono] Título · detalle» de la lista de servicios."""
+    """Fila «✓ [ícono] Título · detalle» de la lista de servicios (con el texto legible para la pantalla)."""
+    titulo, detalle = servicio_legible(titulo, detalle)
     w = QWidget()
     h = QHBoxLayout(w)
     h.setContentsMargins(0, 2, 0, 2)
@@ -32,7 +34,7 @@ def _servicio(titulo, detalle, icono_s, color):
     t.setWordWrap(True)
     v.addWidget(t)
     if detalle:
-        d = CaptionLabel(detalle.strip("()"))
+        d = CaptionLabel(detalle)
         d.setWordWrap(True)
         v.addWidget(d)
     h.addLayout(v, 1)
@@ -48,6 +50,12 @@ class PaquetesInterface(QWidget):
         self.cfg = cfg
         raiz = QVBoxLayout(self)
         raiz.setContentsMargins(0, 0, 0, 0)
+        raiz.setSpacing(0)
+        # la cabecera queda fija arriba: «Guardar cambios» siempre a la vista aunque se desplace la lista
+        cabecera = QWidget()
+        cab = QHBoxLayout(cabecera)
+        cab.setContentsMargins(32, 24, 32, 14)
+        raiz.addWidget(cabecera)
         scroll = SmoothScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -55,12 +63,11 @@ class PaquetesInterface(QWidget):
         cont = QWidget()
         cont.setStyleSheet("background:transparent")
         scroll.setWidget(cont)
-        raiz.addWidget(scroll)
+        raiz.addWidget(scroll, 1)
         v = self.v = QVBoxLayout(cont)
-        v.setContentsMargins(32, 24, 32, 28)
+        v.setContentsMargins(32, 4, 32, 28)
         v.setSpacing(18)
 
-        cab = QHBoxLayout()
         tit = QVBoxLayout()
         tit.setSpacing(2)
         tit.addWidget(TitleLabel("Paquetes"))
@@ -73,9 +80,9 @@ class PaquetesInterface(QWidget):
         cab.addSpacing(8)
         self.b_guardar = PrimaryPushButton(FIF.SAVE, "Guardar cambios")
         self.b_guardar.setFixedHeight(38)
+        estilo.boton_principal(self.b_guardar, FIF.SAVE)
         self.b_guardar.clicked.connect(self.guardar)
         cab.addWidget(self.b_guardar, 0, Qt.AlignVCenter)
-        v.addLayout(cab)
 
         tarjetas = []
         self.precios = {}
@@ -85,6 +92,7 @@ class PaquetesInterface(QWidget):
             color = COLOR_PAQUETE.get(clave, "#888888")
             card = Tarjeta(acento=color)
             card.resaltada = clave == destacado
+            card.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)   # las 4 columnas, del mismo ancho
             c = QVBoxLayout(card)
             c.setContentsMargins(20, 22, 20, 18)
             c.setSpacing(10)
@@ -92,9 +100,6 @@ class PaquetesInterface(QWidget):
             fila.setSpacing(12)
             fila.addWidget(Icono(ICONO_PAQUETE.get(clave, "camara"), 22, color=color, fondo=color, caja=42))
             fila.addWidget(SubtitleLabel(NOMBRES_PAQUETE.get(clave, clave.title())), 1)
-            if clave == destacado:
-                fila.addWidget(Pildora("Más vendido", estilo.ROJO, solida=True, tam_letra=10, alto=22), 0,
-                               Qt.AlignVCenter)
             c.addLayout(fila)
             precio = Monto()
             precio.setValue(int(paq["precio"]))
@@ -107,6 +112,9 @@ class PaquetesInterface(QWidget):
             fila_r.addWidget(Icono("recibo", 14))
             fila_r.addWidget(CaptionLabel(f"Reserva sugerida {q(reserva)}"))
             fila_r.addStretch(1)
+            if clave == destacado:          # aquí sobra lugar: así el nombre del paquete nunca se corta
+                fila_r.addWidget(Pildora("Más vendido", estilo.ROJO, solida=True, tam_letra=10, alto=22), 0,
+                                 Qt.AlignVCenter)
             c.addLayout(fila_r)
             c.addWidget(Separador())
             incluye = paq.get("incluye", [])
@@ -132,9 +140,9 @@ class PaquetesInterface(QWidget):
         hn.setContentsMargins(16, 12, 16, 12)
         hn.setSpacing(12)
         hn.addWidget(Icono("ajustes", 18))
-        texto = CaptionLabel("Los servicios de cada paquete van dentro de su plantilla PSD: para cambiarlos se edita "
-                             "PROGRAMA\\config_default.json, se corre crear_plantillas.py y se vuelve a crear el "
-                             "instalador.")
+        texto = CaptionLabel("Los precios los cambias aquí y se usan desde el próximo comprobante. Los servicios de cada "
+                             "paquete vienen en el diseño del comprobante: para cambiarlos hace falta actualizar el diseño "
+                             "y el programa.")
         texto.setWordWrap(True)
         hn.addWidget(texto, 1)
         v.addWidget(nota)

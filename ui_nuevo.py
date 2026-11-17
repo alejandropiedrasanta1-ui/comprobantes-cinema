@@ -22,6 +22,7 @@ import registro
 import rutas
 from estilo import Atajo, Cifra, Pildora
 from ui_comun import (CTRL, NOMBRES_PAQUETE, Bloque, Monto, Pasos, Rejilla, TarjetaPaquete, Trabajo, ZonaCaptura,
+                      servicio_legible,
                       abrir, abrir_whatsapp, aviso, copiar_imagen, digitos_telefono, faltan, fecha_larga,
                       formatear_telefono, q)
 
@@ -74,8 +75,8 @@ class _FilaServicios(QWidget):
             self.h.takeAt(0)
         for c in self.chips:
             c.deleteLater()
-        self.chips = [Pildora(t, icono_nombre=i, tam_letra=12, alto=26) for t, _, i in incluye]
-        self.nombres = [t for t, _, _ in incluye]
+        self.chips = [Pildora(servicio_legible(t, d)[0], icono_nombre=i, tam_letra=12, alto=26) for t, d, i in incluye]
+        self.nombres = [servicio_legible(t, d)[0] for t, d, _ in incluye]
         for c in self.chips:
             self.h.addWidget(c)
         self.h.addWidget(self.mas)
@@ -101,6 +102,35 @@ class _FilaServicios(QWidget):
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self._acomodar()
+
+
+class _Desvanecido(QWidget):
+    """Degradado al pie del formulario cuando hay más abajo (ventanas muy bajas): avisa que se puede desplazar."""
+
+    def __init__(self, scroll):
+        super().__init__(scroll)
+        self.scroll = scroll
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        sb = scroll.verticalScrollBar()
+        sb.rangeChanged.connect(lambda *_: self.revisar())
+        sb.valueChanged.connect(lambda *_: self.revisar())
+        self.hide()
+
+    def revisar(self):
+        sb = self.scroll.verticalScrollBar()
+        vp = self.scroll.viewport()
+        self.setGeometry(vp.x(), vp.y() + vp.height() - 34, vp.width(), 34)
+        self.setVisible(sb.maximum() > 0 and sb.value() < sb.maximum() - 2)
+        self.raise_()
+
+    def paintEvent(self, e):
+        from PySide6.QtGui import QLinearGradient
+        p = QPainter(self)
+        g = QLinearGradient(0, 0, 0, self.height())
+        g.setColorAt(0, estilo.alfa(estilo.c("fondo"), 0))
+        g.setColorAt(1, estilo.alfa(estilo.c("fondo"), 235))
+        p.fillRect(self.rect(), g)
+        p.end()
 
 
 class _PanelVista(QFrame):
@@ -594,6 +624,7 @@ class NuevoInterface(QWidget):
         cont = QWidget()
         cont.setStyleSheet("background:transparent")
         scroll.setWidget(cont)
+        self.desvanecido = _Desvanecido(scroll)
         v = self.v_form = QVBoxLayout(cont)
         v.setContentsMargins(26, 16, 20, 14)
         v.setSpacing(10)
@@ -638,9 +669,11 @@ class NuevoInterface(QWidget):
         self.telefono.setPlaceholderText("+502 0000 0000")
         for campo in (self.festejado, self.lugar):  # al salir del campo, que se vea desde el inicio
             campo.editingFinished.connect(lambda c=campo: c.setCursorPosition(0))
+            # si el texto cambia sin el foco (limpiar, datos cargados), que se vea desde el inicio; completo en el tooltip
+            campo.textChanged.connect(lambda txt, c=campo: (c.setToolTip(txt), None if c.hasFocus() else c.setCursorPosition(0)))
         self.telefono.editingFinished.connect(
             lambda: self.telefono.setText(formatear_telefono(self.telefono.text())))
-        self.nota_fecha.setWordWrap(True)
+        self.nota_fecha.setWordWrap(False)       # siempre en un renglón (con la letra de Mac se partía)
         self.b1.cuerpo.addWidget(Rejilla([
             _campo("Festejado(s)", self.festejado), _campo("Lugar", self.lugar),
             _campo("Fecha del evento", self.fecha_evento, self.nota_fecha),
@@ -691,7 +724,7 @@ class NuevoInterface(QWidget):
         self.b_volver = TransparentPushButton(FIF.LEFT_ARROW, "Datos")     # solo en ventanas angostas
         self.b_volver.clicked.connect(lambda: self._ver_vista(False))
         cabv.addWidget(self.b_volver)
-        self.titulo_vista = StrongBodyLabel("Vista previa en vivo")
+        self.titulo_vista = StrongBodyLabel("Vista previa")   # (si está en vivo lo dice la píldora)
         f = self.titulo_vista.font()
         f.setPixelSize(15)
         self.titulo_vista.setFont(f)
@@ -751,10 +784,10 @@ class NuevoInterface(QWidget):
         self.resumen.setMinimumWidth(0)
         hb.addWidget(self.resumen, 1)
         self.btn_copiar = PushButton(FIF.COPY, "Copiar")
-        self.btn_copiar.setFixedHeight(38)
+        self.btn_copiar.setFixedHeight(40)
         self.btn_copiar.clicked.connect(self.copiar)
         self.btn_wa = PushButton(FIF.CHAT.icon(color=QColor(estilo.VERDE)), "WhatsApp")
-        self.btn_wa.setFixedHeight(38)
+        self.btn_wa.setFixedHeight(40)
         self.btn_wa.setToolTip("Abre el chat del cliente; el comprobante queda copiado para pegar")
         self.btn_wa.installEventFilter(ToolTipFilter(self.btn_wa))
         self.btn_wa.clicked.connect(self.whatsapp)
@@ -762,7 +795,8 @@ class NuevoInterface(QWidget):
         self.btn_generar = PrimaryPushButton(FIF.ACCEPT, "Generar comprobante")
         self.btn_generar.setToolTip(f"{CTRL}Enter")
         self.btn_generar.installEventFilter(ToolTipFilter(self.btn_generar))
-        self.btn_generar.setFixedHeight(42)
+        self.btn_generar.setFixedHeight(40)
+        estilo.boton_principal(self.btn_generar, FIF.ACCEPT)
         self.btn_generar.setMinimumWidth(220)
         self.btn_generar.clicked.connect(self.generar)
         hb.addWidget(self.btn_copiar)
@@ -833,7 +867,7 @@ class NuevoInterface(QWidget):
 
     def _estado_bloques(self):
         fe = self.fecha_evento.getDate().toPython()
-        self.nota_fecha.setText(f"{fecha_larga(fe).split(' ')[0]} · {faltan(fe)}")
+        self.nota_fecha.setText(f"{fecha_larga(fe).split(' ')[0][:3]} · {faltan(fe)}")
         self.nota_fecha.setToolTip(fecha_larga(fe).capitalize())
         f1 = [n for n, ok in (("festejado", self.festejado.text().strip()),
                               ("lugar", self.lugar.text().strip()),
@@ -944,8 +978,8 @@ class NuevoInterface(QWidget):
             return  # se está mostrando el comprobante final
         # se muestra aunque ya haya otro cambio en cola: así se ve avanzar mientras escribes
         self.vista_ruta = ruta
-        self.titulo_vista.setText("Vista previa en vivo")
-        texto = (("Hay cambios sin generar · " if self.sin_generar else "") +
+        self.titulo_vista.setText("Vista previa")
+        texto =(("Hay cambios sin generar · " if self.sin_generar else "") +
                  "Así quedará · se actualiza mientras escribes")
         if self.estado.text() != texto:
             self.estado.setText(texto)
@@ -1065,6 +1099,7 @@ class NuevoInterface(QWidget):
         self.cuerpo.setStretchFactor(self.scroll_form, 50 if mitad else 44)
         self.cuerpo.setStretchFactor(self.panel_vista, 50 if mitad else 56)
         QTimer.singleShot(40, self._revisar_alto)
+        QTimer.singleShot(90, self.desvanecido.revisar)
         corta = ancho < ANCHO_BARRA_CORTA
         self.resumen.setVisible(ancho >= 1060)
         self.atajo.setVisible(ancho >= 960)
@@ -1086,6 +1121,9 @@ class NuevoInterface(QWidget):
         activo = bool(self.ultimo) and not self.sin_generar
         self.btn_copiar.setEnabled(activo)
         self.btn_wa.setEnabled(activo)
+        espera = "" if activo else "Primero genera el comprobante"
+        self.btn_copiar.setToolTip(espera or "Copiar el comprobante para pegarlo")
+        self.btn_wa.setToolTip(espera or "Abre el chat del cliente; el comprobante queda copiado para pegar")
 
     def copiar(self):
         if self.ultimo:
@@ -1121,7 +1159,7 @@ class NuevoInterface(QWidget):
         self.abrir_bloque(self.b1)
         self._estado_bloques()
         self._mostrar_plantilla()
-        self.titulo_vista.setText("Vista previa en vivo")
+        self.titulo_vista.setText("Vista previa")
         self._ver_vista(False)
 
     def generar(self):

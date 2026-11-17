@@ -56,6 +56,7 @@ class Ventana(MSFluentWindow):
         self.cfg = cfg
         self.revision = None
         estilo.ANIMAR = bool(cfg.get("animaciones", True))
+        setThemeColor(QColor(COLOR_MARCA))      # rojo de la marca siempre (también en pruebas y capturas)
         self.setWindowTitle("Comprobantes · Cinema Productions")
         self.setWindowIcon(QIcon(str(rutas.recurso("recursos/icono.png"))))
         # Fondo grafito parejo (sin Mica: en Windows 11 teñía la ventana con el fondo de pantalla)

@@ -104,7 +104,7 @@ class DelegadoClientes(TableItemDelegate):
         elif col == COL_SALDO:
             saldo = dato
             p.setFont(estilo.fuente_numeros(14, QFont.Bold if saldo > 0 else QFont.Normal, option.font))
-            p.setPen(QColor(estilo.ROJO_CLARO) if saldo > 0 else estilo.c("texto3"))
+            p.setPen(QColor(estilo.ROJO_CLARO if isDarkTheme() else estilo.ROJO) if saldo > 0 else estilo.c("texto3"))
             p.drawText(QRectF(r.left() + 8, r.top(), r.width() - 20, r.height()), int(Qt.AlignRight | Qt.AlignVCenter),
                        q(saldo))
         elif col == COL_ESTADO:
@@ -122,7 +122,7 @@ class DelegadoClientes(TableItemDelegate):
             p.setPen(Qt.NoPen)
             p.setBrush(color)
             p.drawEllipse(punto, 3.2, 3.2)
-            p.setPen(color)
+            p.setPen(estilo.tinta(color))                     # en el tema claro, más oscuro para que se lea
             p.drawText(caja.adjusted(22, 0, -8, 0), int(Qt.AlignLeft | Qt.AlignVCenter), estado)
         p.restore()
 
@@ -141,7 +141,7 @@ class DelegadoPagos(ListItemDelegate):
         elegido = bool(option.state & QStyle.State_Selected)
         if elegido or option.state & QStyle.State_MouseOver:
             p.setPen(Qt.NoPen)
-            p.setBrush(estilo.alfa(estilo.ROJO, 28) if elegido else estilo.c("sup3"))
+            p.setBrush(estilo.c("sup3") if elegido else estilo.c("sup2"))     # neutro: el rojo parecía un error
             p.drawRoundedRect(r.adjusted(2, 2, -2, -2), 8, 8)
         x = r.left() + 16
         p.setPen(QPen(estilo.c("borde2"), 1.4))
@@ -219,7 +219,7 @@ class ChipFiltro(QWidget):
         fm = p.fontMetrics()
         p.setPen(estilo.c("texto") if self.activo else estilo.c("texto2"))
         p.drawText(QRectF(13, 0, self.width(), self.height()), Qt.AlignLeft | Qt.AlignVCenter, self.texto)
-        p.setPen(QColor(estilo.ROJO_CLARO) if self.activo else estilo.c("texto3"))
+        p.setPen(QColor(estilo.ROJO_CLARO if isDarkTheme() else estilo.ROJO) if self.activo else estilo.c("texto3"))
         p.drawText(QRectF(13 + fm.horizontalAdvance(self.texto) + 8, 0, 40, self.height()),
                    Qt.AlignLeft | Qt.AlignVCenter, str(self.n))
         p.end()
@@ -314,6 +314,8 @@ class HistorialInterface(QWidget):
         self.actual = None
         self.trabajo = None
         self.filtro = "Todos"
+        self.compacto = False
+        self.viendo_detalle = False     # ventanas angostas: lista o detalle
 
         raiz = QHBoxLayout(self)
         raiz.setContentsMargins(0, 0, 0, 0)
@@ -333,6 +335,7 @@ class HistorialInterface(QWidget):
         cab.addLayout(tit, 1)
         self.b_nuevo = PrimaryPushButton(FIF.ADD, "Nuevo comprobante")
         self.b_nuevo.setFixedHeight(38)
+        estilo.boton_principal(self.b_nuevo, FIF.ADD)
         self.b_nuevo.clicked.connect(lambda: self.pedir_nuevo.emit())
         cab.addWidget(self.b_nuevo, 0, Qt.AlignVCenter)
         v.addLayout(cab)
@@ -374,6 +377,7 @@ class HistorialInterface(QWidget):
         self.tabla.setShowGrid(False)
         self.tabla.setColumnCount(len(COLUMNAS))
         self.tabla.setHorizontalHeaderLabels(COLUMNAS)
+        self.tabla.horizontalHeaderItem(COL_SALDO).setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)  # como los montos
         self.tabla.setItemDelegate(DelegadoClientes(self.tabla))
         self.tabla.verticalHeader().hide()
         self.tabla.verticalHeader().setDefaultSectionSize(64)
@@ -401,6 +405,7 @@ class HistorialInterface(QWidget):
                      0, Qt.AlignHCenter)
         ve.addSpacing(4)
         b_primero = PrimaryPushButton(FIF.ADD, "Crear el primer comprobante")
+        estilo.boton_principal(b_primero, FIF.ADD)
         b_primero.clicked.connect(lambda: self.pedir_nuevo.emit())
         ve.addWidget(b_primero, 0, Qt.AlignHCenter)
         ve.addStretch(2)
@@ -410,7 +415,7 @@ class HistorialInterface(QWidget):
         # ---------- Panel de detalle ----------
         self.panel = Tarjeta(radio=16)
         self.panel.setFixedWidth(372)
-        marco = QVBoxLayout()
+        marco = self.marco = QVBoxLayout()
         marco.setContentsMargins(0, 20, 20, 20)
         marco.addWidget(self.panel)
         scroll = SmoothScrollArea(self.panel)
@@ -430,6 +435,10 @@ class HistorialInterface(QWidget):
         p = self.p_panel = QVBoxLayout(cont)
         p.setContentsMargins(20, 22, 20, 18)
         p.setSpacing(10)
+        self.b_volver = TransparentPushButton(FIF.LEFT_ARROW, "Clientes")      # solo en ventanas angostas
+        self.b_volver.clicked.connect(lambda: self._ver_detalle(False))
+        self.b_volver.hide()
+        p.addWidget(self.b_volver, 0, Qt.AlignLeft)
         cabd = QHBoxLayout()
         cabd.setSpacing(14)
         self.d_avatar = Avatar("?", 54)
@@ -464,11 +473,24 @@ class HistorialInterface(QWidget):
         cs.addWidget(self.d_saldo)
         p.addWidget(self.caja_saldo)
 
+        # sin cliente elegido: un estado vacío amable (sin títulos ni botones apagados flotando)
+        self.d_vacio = QWidget()
+        dv = QVBoxLayout(self.d_vacio)
+        dv.setContentsMargins(0, 40, 0, 0)
+        dv.setSpacing(10)
+        dv.addWidget(Icono("personas", 28, fondo="#8A8A93", caja=64), 0, Qt.AlignHCenter)
+        aviso_vacio = CaptionLabel("Elige un cliente de la lista para ver sus pagos, enviarle su comprobante "
+                                   "o registrar un abono.")
+        aviso_vacio.setWordWrap(True)
+        aviso_vacio.setAlignment(Qt.AlignCenter)
+        dv.addWidget(aviso_vacio)
+        p.addWidget(self.d_vacio)
         p.addSpacing(6)
-        p.addWidget(StrongBodyLabel("Historial de pagos"))
+        self.t_historial = StrongBodyLabel("Historial de pagos")
+        p.addWidget(self.t_historial)
         self.lista = ListWidget()
         self.lista.setItemDelegate(DelegadoPagos(self.lista))
-        self.lista.setFixedHeight(156)
+        self.lista.setFixedHeight(56)                  # se ajusta a la cantidad de pagos (hasta 3 a la vista)
         self.lista.itemDoubleClicked.connect(lambda it: abrir(it.data(Qt.UserRole)))
         p.addWidget(self.lista)
         self.b_ver = PushButton(FIF.VIEW, "Ver")
@@ -478,8 +500,10 @@ class HistorialInterface(QWidget):
         self.b_copiar.clicked.connect(self._copiar_pago)
         self.b_wa = PushButton(FIF.CHAT.icon(color=QColor(estilo.VERDE)), "WhatsApp")
         self.b_wa.clicked.connect(self._whatsapp)
-        p.addWidget(Rejilla([self.b_ver, self.b_copiar, self.b_wa], max_columnas=3, ancho_min=90, espacio=8))
-        p.addWidget(Separador())
+        self.fila_botones = Rejilla([self.b_ver, self.b_copiar, self.b_wa], max_columnas=3, ancho_min=90, espacio=8)
+        p.addWidget(self.fila_botones)
+        self.sep_abono = Separador()
+        p.addWidget(self.sep_abono)
 
         self.t_abono = StrongBodyLabel("Registrar abono")
         p.addWidget(self.t_abono)
@@ -492,7 +516,7 @@ class HistorialInterface(QWidget):
         self.fecha.setDateFormat("dd/MM/yyyy")
         self.fecha.setDate(QDate.currentDate())
         a.addWidget(Rejilla([self.monto, self.fecha], max_columnas=2, ancho_min=120, espacio=8))
-        self.zona = ZonaCaptura(104)
+        self.zona = ZonaCaptura(92)
         a.addWidget(self.zona)
         fila_z = QHBoxLayout()
         b_pegar = TransparentPushButton(FIF.PASTE, f"Pegar captura ({CTRL}V)")
@@ -507,6 +531,7 @@ class HistorialInterface(QWidget):
         self.b_abono = PrimaryPushButton(FIF.ACCEPT, "Registrar abono")
         self.b_abono.setToolTip(f"Genera el comprobante del abono ({CTRL}Enter)")
         self.b_abono.setFixedHeight(40)
+        estilo.boton_principal(self.b_abono, FIF.ACCEPT)
         self.b_abono.clicked.connect(self.generar_abono)
         a.addWidget(self.b_abono)
         p.addWidget(self.caja_abono)
@@ -523,15 +548,36 @@ class HistorialInterface(QWidget):
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
+        self._acomodar()
+
+    def _acomodar(self):
+        """Ventanas anchas: lista y detalle lado a lado. Angostas (< 900 px): uno u otro, a todo el ancho;
+        al elegir un cliente se ve su detalle y «← Clientes» vuelve a la lista."""
         ancho = self.width()
-        # el panel de detalle se angosta en ventanas chicas (laptops, MacBook)
-        self.panel.setFixedWidth(372 if ancho >= 1100 else (320 if ancho >= 900 else 286))
-        chico = ancho < 900
-        self.v_izq.setContentsMargins(*((18, 16, 14, 14) if chico else (32, 24, 20, 20)))
-        self.p_panel.setContentsMargins(*((14, 18, 14, 14) if chico else (20, 22, 20, 18)))
-        self.b_nuevo.setText("Nuevo" if ancho - self.panel.width() < 600 else "Nuevo comprobante")
-        self.fila_b.setDirection(QBoxLayout.TopToBottom if ancho - self.panel.width() < 760 else QBoxLayout.LeftToRight)
+        self.compacto = ancho < 900
+        if self.compacto:
+            self.panel.setMinimumWidth(0)
+            self.panel.setMaximumWidth(16777215)
+            self.marco.setContentsMargins(14, 12, 14, 12)
+            self.izq.setVisible(not self.viendo_detalle)
+            self.panel.setVisible(self.viendo_detalle)
+            libre = ancho
+        else:
+            self.panel.setFixedWidth(372 if ancho >= 1100 else 320)   # se angosta en laptops y MacBook
+            self.marco.setContentsMargins(0, 20, 20, 20)
+            self.izq.setVisible(True)
+            self.panel.setVisible(True)
+            libre = ancho - self.panel.width()
+        self.b_volver.setVisible(self.compacto)
+        self.v_izq.setContentsMargins(*((18, 16, 14, 14) if self.compacto else (32, 24, 20, 20)))
+        self.p_panel.setContentsMargins(*((14, 10, 14, 14) if self.compacto else (20, 22, 20, 18)))
+        self.b_nuevo.setText("Nuevo" if libre < 600 else "Nuevo comprobante")
+        self.fila_b.setDirection(QBoxLayout.TopToBottom if libre < 760 else QBoxLayout.LeftToRight)
         QTimer.singleShot(0, self._columnas)
+
+    def _ver_detalle(self, si):
+        self.viendo_detalle = si
+        self._acomodar()
 
     def _columnas(self):
         # Si la tabla queda angosta se ocultan columnas (el detalle las sigue mostrando),
@@ -605,6 +651,10 @@ class HistorialInterface(QWidget):
             self.tabla.selectRow(fila_sel)
             self._detalle(registro.cliente(seleccion))
         else:
+            self.tabla.blockSignals(True)            # sin cliente elegido, ninguna fila marcada (p. ej. al filtrar)
+            self.tabla.clearSelection()
+            self.tabla.setCurrentCell(-1, -1)
+            self.tabla.blockSignals(False)
             self._detalle(None)
 
     def _filtrar(self, nombre):
@@ -614,6 +664,8 @@ class HistorialInterface(QWidget):
     def _seleccion(self):
         filas = self.tabla.selectionModel().selectedRows()
         self._detalle(self.clientes[filas[0].row()] if filas else None)
+        if filas and self.compacto:                  # ventana angosta: se pasa al detalle
+            self._ver_detalle(True)
 
     def _fundir_detalle(self):
         """El panel de detalle aparece con un fundido corto (sin efecto mientras está quieto: no gasta)."""
@@ -627,14 +679,13 @@ class HistorialInterface(QWidget):
         hay = c is not None
         if (c.id if hay else None) != anterior and self.isVisible():
             self._fundir_detalle()
-        for w in (self.b_ver, self.b_copiar, self.b_wa, self.b_borrar, self.lista):
-            w.setEnabled(hay)
-        for w in (self.d_avatar, self.d_barra, self.d_progreso, self.caja_saldo, self.d_chips):
+        for w in (self.d_avatar, self.d_barra, self.d_progreso, self.caja_saldo, self.d_chips, self.d_info,
+                  self.t_historial, self.lista, self.fila_botones, self.sep_abono, self.b_borrar):
             w.setVisible(hay)
+        self.d_vacio.setVisible(not hay)
         self.flow.takeAllWidgets()
         if not hay:
             self.d_nombre.setText("Selecciona un cliente")
-            self.d_info.setText("Elige una fila de la tabla para ver sus pagos y registrar abonos.")
             self.lista.clear()
             self.caja_abono.setVisible(False)
             self.t_abono.setVisible(False)
@@ -661,6 +712,7 @@ class HistorialInterface(QWidget):
             self.lista.addItem(it)
         if self.lista.count():
             self.lista.setCurrentRow(self.lista.count() - 1)
+        self.lista.setFixedHeight(min(3, max(1, self.lista.count())) * 50 + 6)   # el alto justo (hasta 3 a la vista)
         debe = c.saldo > 0
         self.caja_abono.setVisible(debe)
         self.t_abono.setVisible(debe)

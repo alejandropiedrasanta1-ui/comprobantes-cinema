@@ -21,10 +21,10 @@ RADIO = 14
 
 _OSCURO = dict(fondo="#0F0F12", panel="#131317", sup="#17171C", sup2="#1E1E24", sup3="#26262D",
                borde=(255, 255, 255, 16), borde2=(255, 255, 255, 30), texto="#F2F2F4", texto2="#A1A1AA",
-               texto3="#71717A", punto=(255, 255, 255, 14))
+               texto3="#8B8B94", punto=(255, 255, 255, 14))
 _CLARO = dict(fondo="#F5F5F7", panel="#EEEEF1", sup="#FFFFFF", sup2="#F8F8FA", sup3="#EFEFF3",
               borde=(0, 0, 0, 20), borde2=(0, 0, 0, 34), texto="#111114", texto2="#52525B",
-              texto3="#8A8A93", punto=(0, 0, 0, 18))
+              texto3="#6B6B74", punto=(0, 0, 0, 18))
 
 
 def c(nombre):
@@ -37,6 +37,29 @@ def alfa(color, a):
     col = QColor(color)
     col.setAlpha(a)
     return col
+
+
+def tinta(color):
+    """Color de un texto de estado (verde, ámbar, azul…): en el tema claro, más oscuro para que se lea
+    (contraste ≥ 4.5:1 sobre blanco); en el oscuro, tal cual."""
+    col = QColor(color)
+    return col if isDarkTheme() else col.darker(185)
+
+
+def boton_principal(boton, icono_fif=None):
+    """El botón principal igual en los dos temas: rojo de la marca con texto e ícono blancos
+    (Fluent-Widgets lo pinta rosado con texto negro en el tema oscuro)."""
+    from qfluentwidgets import setCustomStyleSheet
+    qss = (f"PrimaryPushButton{{color:white;background-color:{ROJO};border:1px solid {ROJO};"
+           "border-bottom:1px solid #B91C21;}"
+           "PrimaryPushButton:hover{background-color:#EC3A3F;border:1px solid #EC3A3F;}"
+           "PrimaryPushButton:pressed{background-color:#C41E23;border:1px solid #C41E23;color:rgba(255,255,255,0.85);}"
+           "PrimaryPushButton:disabled{background-color:rgba(229,37,42,0.38);border:1px solid rgba(229,37,42,0.0);"
+           "color:rgba(255,255,255,0.7);}")
+    setCustomStyleSheet(boton, qss, qss)
+    if icono_fif is not None:
+        boton.setIcon(icono_fif.icon(color=QColor("white")))
+    return boton
 
 
 def mezclar(a, b, t):
@@ -322,9 +345,9 @@ class Pildora(QWidget):
             p.setBrush(color)
             texto = QColor("white")
         else:
-            p.setPen(QPen(alfa(color, 70), 1))
-            p.setBrush(alfa(color, 34 if isDarkTheme() else 26))
-            texto = color if self.color else c("texto2")
+            p.setPen(QPen(alfa(color, 70 if isDarkTheme() else 90), 1))
+            p.setBrush(alfa(color, 34 if isDarkTheme() else 30))
+            texto = tinta(color) if self.color else c("texto2")
         p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
         x = 10
         if self.icono_nombre:

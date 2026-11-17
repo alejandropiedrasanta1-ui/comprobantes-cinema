@@ -1,10 +1,11 @@
 #!/bin/bash
-# Arma el instalador de Mac (mismo método que CineSlide) a partir de la app ya compilada con PyInstaller.
+# Arma el instalador de Mac (mismo método que CineCaptions/CineSlide) a partir de la app ya compilada con PyInstaller.
 #   Uso: crear_instalador_mac.sh "<ruta a Comprobantes Cinema.app>" "<carpeta de salida>"
 # Resultado: "<salida>/Instalar Comprobantes Cinema (Mac <tipo>) <versión>.dmg". Al abrirlo se ve una ventana con
 # fondo «Doble clic para instalar» y la app «Instalar Comprobantes»; su doble clic abre la ventana NATIVA del
 # instalador (Swift, mac/instalador_mac.swift): copia a Aplicaciones, fija en el Dock, abre el programa, se cierra
-# y expulsa el disco.
+# y expulsa el disco. El programa viaja OCULTO en el disco junto al instalador («.Comprobantes Cinema.app»): el
+# instalador pesa poco y su ventana aparece al instante.
 # Necesita: Xcode o las Command Line Tools (swiftc) y dmgbuild (pip install dmgbuild; si falta se usa un .dmg simple).
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -46,16 +47,18 @@ cat > "$INST/Contents/Info.plist" <<PLIST
 PLIST
 plutil -lint "$INST/Contents/Info.plist"
 
-# 3) El programa va adentro, con el mismo ícono
-ditto "$APP" "$INST/Contents/Resources/Comprobantes Cinema.app"
+# 3) El programa va OCULTO junto al instalador (no adentro); el instalador lleva solo el ícono
+OCULTA="$TMP/.Comprobantes Cinema.app"
+ditto "$APP" "$OCULTA"
 cp ../recursos/icono.png "$INST/Contents/Resources/icono.png"
 ICONO=$(find "$APP/Contents/Resources" -maxdepth 1 -name "*.icns" | head -1)
 if [ -n "$ICONO" ]; then cp "$ICONO" "$INST/Contents/Resources/AppIcon.icns"; fi
 
-# 4) Firma local (ad hoc), necesaria en Mac con Apple Silicon
-xattr -cr "$INST"
+# 4) Firma local (ad hoc), necesaria en Mac con Apple Silicon (el instalador y el programa)
+xattr -cr "$INST" "$OCULTA"
 codesign --force --deep -s - "$INST"
-codesign -v --deep "$INST" && echo "firma ad hoc OK" >&2
+codesign --force --deep -s - "$OCULTA"
+codesign -v --deep "$INST" && codesign -v --deep "$OCULTA" && echo "firma ad hoc OK" >&2
 
 # 5) El .dmg: ventana con fondo «Doble clic para instalar»
 DMG="$SALIDA/Instalar Comprobantes Cinema (Mac $TIPO) $VERSION.dmg"
@@ -63,11 +66,11 @@ VOLUMEN="Comprobantes Cinema $VERSION"
 rm -f "$DMG"
 if "$PY" -c "import dmgbuild" 2>/dev/null; then
   tiffutil -cathidpicheck mac/fondo.png mac/fondo@2x.png -out "$TMP/fondo.tiff" >/dev/null
-  "$PY" -m dmgbuild -s mac/dmg_ajustes.py -D app="$INST" -D fondo="$TMP/fondo.tiff" \
+  "$PY" -m dmgbuild -s mac/dmg_ajustes.py -D app="$INST" -D programa="$OCULTA" -D fondo="$TMP/fondo.tiff" \
     -D icono="$INST/Contents/Resources/AppIcon.icns" "$VOLUMEN" "$DMG" >&2
 else
   echo "AVISO: falta dmgbuild (pip install dmgbuild); se crea un .dmg sin fondo" >&2
-  mkdir -p "$TMP/dmg" && mv "$INST" "$TMP/dmg/"
+  mkdir -p "$TMP/dmg" && mv "$INST" "$OCULTA" "$TMP/dmg/"
   hdiutil create -volname "$VOLUMEN" -srcfolder "$TMP/dmg" -ov -format ULFO "$DMG" >/dev/null
 fi
 hdiutil verify "$DMG" >&2

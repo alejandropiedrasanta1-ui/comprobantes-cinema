@@ -246,9 +246,6 @@ class AjustesInterface(QWidget):
         self.titulo_angosto = TitleLabel("Ajustes")      # cuando el menú de secciones no cabe
         self.titulo_angosto.hide()
         v.addWidget(self.titulo_angosto)
-        sub = CaptionLabel("Configura los comprobantes, la vista previa, PhotoCraft, el diseño y tus datos.")
-        sub.setWordWrap(True)
-        v.addWidget(sub)
         self.grupos = {}
 
         # Comprobantes
@@ -279,13 +276,13 @@ class AjustesInterface(QWidget):
 
         # Vista previa
         self.vivo = SwitchButton()
-        self.vivo.setOnText("Sí")
-        self.vivo.setOffText("No")
+        self.vivo.setOnText("")          # sin «Sí/No»: tienen anchos distintos y desalineaban los interruptores
+        self.vivo.setOffText("")
         self.vivo.setChecked(bool(cfg.get("vista_en_vivo", True)))
         self.vivo.checkedChanged.connect(lambda si: self.vista_cambiada.emit(si))
         self.animaciones = SwitchButton()
-        self.animaciones.setOnText("Sí")
-        self.animaciones.setOffText("No")
+        self.animaciones.setOnText("")
+        self.animaciones.setOffText("")
         self.animaciones.setChecked(bool(cfg.get("animaciones", True)))
         self.animaciones.checkedChanged.connect(self.cambiar_animaciones)
         self._grupo(v, "vista", "Vista previa y movimiento", [
@@ -310,16 +307,10 @@ class AjustesInterface(QWidget):
         b_revisar.clicked.connect(self.revisar_fuentes)
         b_instalar = PushButton("Instalar desde carpeta…")
         b_instalar.clicked.connect(self.instalar_fuentes)
-        f_fuentes = _fila("album", "Fuentes del diseño", "Lemon Milk, GetVoIP Grotesque y Myriad Pro", self.e_fuentes)
+        f_fuentes = _fila("album", "Lemon Milk, GetVoIP Grotesque y Myriad Pro", "Las letras del comprobante",
+                          self.e_fuentes, b_revisar, b_instalar)
         self.l_fuentes = f_fuentes.ayuda
-        botones = QWidget()
-        hb = QHBoxLayout(botones)
-        hb.setContentsMargins(50, 0, 0, 0)
-        hb.setSpacing(8)
-        hb.addWidget(b_revisar)
-        hb.addWidget(b_instalar)
-        hb.addStretch(1)
-        self._grupo(v, "fuentes", "Fuentes del diseño", [f_fuentes, botones], separar=False)
+        self._grupo(v, "fuentes", "Fuentes del diseño", [f_fuentes])
 
         # Apariencia
         temas = QWidget()
@@ -404,6 +395,10 @@ class AjustesInterface(QWidget):
         super().showEvent(e)
         self._estado_photocraft()
         self.revisar_fuentes()
+        # el tema marcado es el que se ve (si no hay preferencia guardada, el activo)
+        from qfluentwidgets import isDarkTheme
+        tema = self.cfg.get("tema") or ("Oscuro" if isDarkTheme() else "Claro")
+        self._marcar_tema(tema)
 
     # ---------- acciones ----------
     def _estado_photocraft(self):

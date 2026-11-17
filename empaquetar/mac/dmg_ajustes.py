@@ -4,15 +4,18 @@
 import os.path
 
 app = defines["app"]  # noqa: F821  (dmgbuild define "defines")
+programa = defines.get("programa")  # noqa: F821  («.Comprobantes Cinema.app»: oculto por el punto, junto al instalador)
 nombre = os.path.basename(app)
 format = "ULFO"                 # lzfse: abre rápido (macOS 10.11+)
 filesystem = "HFS+"
 size = None
-files = [app]
+files = [app] + ([programa] if programa else [])
 symlinks = {}
 hide_extension = [nombre]       # "Instalar Comprobantes", sin ".app"
 icon = defines.get("icono")  # noqa: F821
 icon_locations = {nombre: (330, 200)}   # centro del ícono: el anillo del fondo y la píldora del nombre están ahí
+if programa:   # fuera de la ventana: aunque el Finder muestre archivos ocultos, no se ve
+    icon_locations[os.path.basename(programa)] = (330, 900)
 background = defines["fondo"]  # noqa: F821
 show_status_bar = False
 show_tab_view = False

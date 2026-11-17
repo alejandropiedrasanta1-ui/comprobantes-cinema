@@ -79,6 +79,8 @@ jobs:
           for i in $(seq 1 90); do MNT=$(ls -d /Volumes/Comprobantes* 2>/dev/null | head -1); [ -n "$MNT" ] && break; sleep 1; done
           echo "montado en: $MNT"
           ls -la "$MNT"
+          test -x "$MNT/.Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" && echo "OK: el programa va oculto junto al instalador"
+          du -sh "$MNT/Instalar Comprobantes.app"   # el instalador debe pesar poco (la ventana aparece al instante)
           sleep 6
           screencapture -x capturas/5_ventana_del_dmg.png || true
           INST="$MNT/Instalar Comprobantes.app/Contents/MacOS/instalar"
