@@ -671,7 +671,8 @@ class NuevoInterface(QWidget):
         self.b1 = Bloque(1, "Cliente y evento", "personas")
         self.seg = SegmentedWidget()
         for nombre in cfg["eventos"]:
-            self.seg.addItem(nombre, nombre, onClick=lambda n=nombre: self._evento(n))
+            # el clic manda «checked» (bool): sin *_ ocuparía el lugar del nombre y el evento quedaba en False
+            self.seg.addItem(nombre, nombre, onClick=lambda *_, n=nombre: self._evento(n))
         self.seg.setCurrentItem(self.evento)
         self.seg.setFixedWidth(190)
         self.b1.en_cabecera(self.seg)
