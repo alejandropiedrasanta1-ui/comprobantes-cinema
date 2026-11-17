@@ -1,15 +1,17 @@
 """Piezas compartidas de la interfaz: zona de captura, tarjetas, bloques, avisos, WhatsApp."""
 import os
 import re
+import sys
 import tempfile
 import traceback
 from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
-from PySide6.QtCore import QMimeData, QRectF, Qt, QThread, QUrl, Signal
+from PySide6.QtCore import QMimeData, QRectF, QSize, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QImage, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QApplication, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLayout,
+                               QVBoxLayout, QWidget)
 from qfluentwidgets import (BodyLabel, CaptionLabel, CardWidget, FluentIcon as FIF, InfoBar,
                             InfoBarPosition, PushButton, SpinBox, StrongBodyLabel, SubtitleLabel,
                             TransparentToolButton, isDarkTheme, themeColor)
@@ -17,6 +19,8 @@ from qfluentwidgets import (BodyLabel, CaptionLabel, CardWidget, FluentIcon as F
 import fuentes
 import motor
 
+# Atajos de teclado como se escriben en cada sistema (en Mac la tecla es ⌘)
+CTRL = "⌘" if sys.platform == "darwin" else "Ctrl+"
 EXT_IMAGEN = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 NOMBRES_PAQUETE = {"ESENCIAL": "Esencial", "INTERMEDIO": "Intermedio", "COMPLETO": "Completo",
                    "PREMIUM": "Premium"}
@@ -187,7 +191,7 @@ class ZonaCaptura(QLabel):
     def limpiar(self):
         self.ruta = None
         self.setPixmap(QPixmap())
-        self.setText("Arrastra aquí la captura del pago\no haz clic para buscarla · Ctrl+V para pegarla")
+        self.setText(f"Arrastra aquí la captura del pago\no haz clic para buscarla · {CTRL}V para pegarla")
         self.setStyleSheet(f"color: {'#9a9a9f' if isDarkTheme() else '#6b6b70'}; font-size: 13px;")
         self.update()
 
@@ -253,6 +257,59 @@ class ZonaCaptura(QLabel):
             if url.toLocalFile().lower().endswith(EXT_IMAGEN):
                 self.usar(url.toLocalFile())
                 return
+
+
+class Rejilla(QWidget):
+    """Coloca widgets en columnas que se reacomodan solas según el ancho disponible:
+    en pantallas grandes van lado a lado y en ventanas chicas (MacBook, laptops) pasan a una sola columna."""
+
+    def __init__(self, widgets=(), max_columnas=2, ancho_min=240, espacio=12, parent=None):
+        super().__init__(parent)
+        self.max_columnas = max_columnas
+        self.ancho_min = ancho_min
+        self.columnas = 0
+        self.widgets = []
+        self.g = QGridLayout(self)
+        self.g.setContentsMargins(0, 0, 0, 0)
+        self.g.setHorizontalSpacing(espacio)
+        self.g.setVerticalSpacing(espacio)
+        # la rejilla puede quedar más angosta que sus columnas actuales: así se entera de que debe reacomodarse
+        self.g.setSizeConstraint(QLayout.SetNoConstraint)
+        for w in widgets:
+            self.agregar(w)
+
+    def agregar(self, w):
+        self.widgets.append(w)
+        w.setParent(self)
+        self._acomodar(forzar=True)
+
+    def _columnas_para(self, ancho):
+        esp = self.g.horizontalSpacing()
+        return max(1, min(self.max_columnas, (ancho + esp) // (self.ancho_min + esp)))
+
+    def _acomodar(self, forzar=False):
+        cols = self._columnas_para(self.width()) if self.width() > 1 else self.max_columnas
+        if cols == self.columnas and not forzar:
+            return
+        self.columnas = cols
+        for w in self.widgets:
+            self.g.removeWidget(w)
+        for i, w in enumerate(self.widgets):
+            self.g.addWidget(w, i // cols, i % cols, Qt.AlignTop)
+        for c in range(self.max_columnas):
+            self.g.setColumnStretch(c, 1 if c < cols else 0)
+        self.updateGeometry()
+
+    def minimumSizeHint(self):
+        ancho = max((w.minimumSizeHint().width() for w in self.widgets), default=0)
+        return QSize(min(ancho, self.ancho_min), self.g.minimumSize().height())
+
+    def sizeHint(self):
+        return QSize(self.g.sizeHint().width(), self.g.sizeHint().height())
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._acomodar()
 
 
 class TarjetaPaquete(CardWidget):

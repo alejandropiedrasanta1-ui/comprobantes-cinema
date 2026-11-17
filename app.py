@@ -6,7 +6,7 @@ from PySide6.QtCore import QLibraryInfo, QLocale, Qt, QTimer, QTranslator
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QLineEdit
 from qfluentwidgets import (FluentIcon as FIF, FluentTranslator, FluentWindow, MessageBox,
-                            NavigationAvatarWidget, NavigationItemPosition, setThemeColor)
+                            NavigationAvatarWidget, NavigationItemPosition, setFontFamilies, setThemeColor)
 
 import motor
 import rutas
@@ -17,6 +17,10 @@ from ui_nuevo import NuevoInterface
 from ui_paquetes import PaquetesInterface
 
 COLOR_MARCA = "#e0262b"
+ES_MAC = sys.platform == "darwin"
+IDEAL = (1380, 900)      # tamaño cómodo en monitores grandes
+MINIMO = (760, 540)      # cabe en pantallas chicas: todo se reacomoda (ver Rejilla y los modos compactos)
+MARGEN_MAC = 84          # ancho de los botones rojo/amarillo/verde de macOS
 
 
 class Ventana(FluentWindow):
@@ -26,8 +30,9 @@ class Ventana(FluentWindow):
         self.revision = None
         self.setWindowTitle("Comprobantes · Cinema Productions")
         self.setWindowIcon(QIcon(str(rutas.recurso("recursos/icono.png"))))
-        self.resize(1380, 900)
-        self.setMinimumSize(1140, 720)
+        if ES_MAC:
+            # deja libre la esquina de los botones rojo/amarillo/verde de macOS
+            self.navigationInterface.panel.vBoxLayout.setContentsMargins(0, 34, 0, 5)
 
         self.nuevo = NuevoInterface(cfg, self)
         self.historial = HistorialInterface(cfg, self)
@@ -56,10 +61,30 @@ class Ventana(FluentWindow):
         for tecla in ("Ctrl+Return", "Ctrl+Enter"):
             QShortcut(QKeySequence(tecla), self, activated=self._generar)
 
-        pantalla = QApplication.primaryScreen().availableGeometry()
-        self.move(pantalla.center() - self.rect().center())
+        self.ajustar_a_pantalla()
         if revisar:
             QTimer.singleShot(600, self.revisar_entorno)
+
+    def ajustar_a_pantalla(self):
+        """Tamaño según la pantalla (sin la barra de menú ni el Dock / la barra de tareas): cabe completa en una
+        MacBook, una laptop o un monitor grande, y queda centrada."""
+        zona = (self.screen() or QApplication.primaryScreen()).availableGeometry()
+        self.setMinimumSize(min(MINIMO[0], zona.width()), min(MINIMO[1], zona.height()))
+        ancho = max(self.minimumWidth(), min(IDEAL[0], int(zona.width() * 0.94)))
+        alto = max(self.minimumHeight(), min(IDEAL[1], int(zona.height() * 0.94)))
+        self.resize(ancho, alto)
+        self.move(zona.x() + (zona.width() - ancho) // 2, zona.y() + (zona.height() - alto) // 2)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if ES_MAC:   # el título va después de los botones de macOS, no encima
+            self.titleBar.move(MARGEN_MAC, 0)
+            self.titleBar.resize(self.width() - MARGEN_MAC, self.titleBar.height())
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        if ES_MAC:   # a veces macOS los esconde al mostrar la ventana: se vuelven a poner
+            QTimer.singleShot(150, lambda: self.setSystemTitleBarButtonVisible(True))
 
     def _nuevo(self):
         self.switchTo(self.nuevo)
@@ -103,6 +128,12 @@ class Ventana(FluentWindow):
         self.revision.start()
 
 
+def configurar_letra():
+    if ES_MAC:
+        # en Mac no existe Segoe UI (la de Windows): se usa la letra del sistema, igual que las apps de Apple
+        setFontFamilies([".AppleSystemUIFont", "Helvetica Neue", "PingFang SC"])
+
+
 def main():
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv)
@@ -112,6 +143,7 @@ def main():
     traductores[1].load("qtbase_es", QLibraryInfo.path(QLibraryInfo.TranslationsPath))
     for tr in traductores:
         app.installTranslator(tr)
+    configurar_letra()
     cfg = motor.cargar_config()
     aplicar_tema(cfg.get("tema", "Oscuro"))
     setThemeColor(QColor(COLOR_MARCA))

@@ -4,12 +4,11 @@ Izquierda: 3 bloques plegables (cliente y evento · paquete · pago y captura) q
 Derecha: vista previa grande que se actualiza sola al dejar de escribir.
 Abajo: barra fija con el saldo y los botones Copiar / WhatsApp / Generar."""
 import tempfile
-from datetime import date
 from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPixmap
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from qfluentwidgets import (CalendarPicker, CaptionLabel, FlowLayout, FluentIcon as FIF,
                             IndeterminateProgressRing, LineEdit, PrimaryPushButton, PushButton,
                             SegmentedWidget, SmoothScrollArea, StrongBodyLabel, SwitchButton,
@@ -19,9 +18,12 @@ from qfluentwidgets import (CalendarPicker, CaptionLabel, FlowLayout, FluentIcon
 import motor
 import registro
 import rutas
-from ui_comun import (NOMBRES_PAQUETE, Bloque, Monto, TarjetaPaquete, Trabajo, ZonaCaptura, abrir,
+from ui_comun import (CTRL, NOMBRES_PAQUETE, Bloque, Monto, Rejilla, TarjetaPaquete, Trabajo, ZonaCaptura, abrir,
                       abrir_whatsapp, aviso, copiar_imagen, digitos_telefono, faltan, fecha_larga,
                       formatear_telefono, q)
+
+ANCHO_COMPACTO = 900     # por debajo: se ve el formulario o la vista previa (botón para cambiar), no los dos
+ANCHO_BARRA_CORTA = 780  # por debajo: la barra inferior se simplifica
 
 
 def _campo(titulo, widget, nota=None):
@@ -63,6 +65,8 @@ class NuevoInterface(QWidget):
         self.vista_ruta = None
         self.n_vista = 0
         self.zoom = False
+        self.compacto = None
+        self.viendo_vista = False
 
         raiz = QVBoxLayout(self)
         raiz.setContentsMargins(0, 0, 0, 0)
@@ -72,14 +76,14 @@ class NuevoInterface(QWidget):
         raiz.addLayout(cuerpo, 1)
 
         # ================= Formulario en bloques =================
-        scroll = SmoothScrollArea(self)
+        scroll = self.scroll_form = SmoothScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setStyleSheet("QScrollArea{background:transparent;border:none}")
         cont = QWidget()
         cont.setStyleSheet("background:transparent")
         scroll.setWidget(cont)
-        v = QVBoxLayout(cont)
+        v = self.v_form = QVBoxLayout(cont)
         v.setContentsMargins(32, 24, 20, 20)
         v.setSpacing(12)
 
@@ -88,14 +92,17 @@ class NuevoInterface(QWidget):
         tit.setSpacing(2)
         tit.addWidget(TitleLabel("Nuevo comprobante"))
         self.progreso = CaptionLabel("")
+        self.progreso.setWordWrap(True)
         tit.addWidget(self.progreso)
-        cab.addLayout(tit)
-        cab.addStretch(1)
+        cab.addLayout(tit, 1)
         b_limpiar = TransparentPushButton(FIF.BROOM, "Limpiar")
-        b_limpiar.setToolTip("Empezar un comprobante nuevo (Ctrl+N)")
+        b_limpiar.setToolTip(f"Empezar un comprobante nuevo ({CTRL}N)")
         b_limpiar.installEventFilter(ToolTipFilter(b_limpiar))
         b_limpiar.clicked.connect(self.limpiar)
         cab.addWidget(b_limpiar, 0, Qt.AlignVCenter)
+        self.b_ver_vista = PushButton(FIF.VIEW, "Vista previa")      # solo en ventanas angostas
+        self.b_ver_vista.clicked.connect(lambda: self._ver_vista(True))
+        cab.addWidget(self.b_ver_vista, 0, Qt.AlignVCenter)
         v.addLayout(cab)
 
         # ---- ① Cliente y evento ----
@@ -106,11 +113,8 @@ class NuevoInterface(QWidget):
         self.seg.setCurrentItem(self.evento)
         self.seg.setFixedWidth(230)
         self.b1.cuerpo.addWidget(self.seg)
-        g = QGridLayout()
-        g.setHorizontalSpacing(12)
-        g.setVerticalSpacing(8)
         self.festejado = LineEdit()
-        self.festejado.setPlaceholderText("Ej. Edgar y Paola  /  Sofía Martínez")
+        self.festejado.setPlaceholderText("Ej. Ana y Luis  /  Sofía Martínez")
         self.festejado.setClearButtonEnabled(True)
         self.lugar = LineEdit()
         self.lugar.setPlaceholderText("Ej. Hotel Camino Real, Guatemala")
@@ -126,11 +130,11 @@ class NuevoInterface(QWidget):
             campo.editingFinished.connect(lambda c=campo: c.setCursorPosition(0))
         self.telefono.editingFinished.connect(
             lambda: self.telefono.setText(formatear_telefono(self.telefono.text())))
-        g.addWidget(_campo("Festejado(s)", self.festejado), 0, 0)
-        g.addWidget(_campo("Lugar", self.lugar), 0, 1)
-        g.addWidget(_campo("Fecha del evento", self.fecha_evento, self.nota_fecha), 1, 0)
-        g.addWidget(_campo("Teléfono del cliente (WhatsApp)", self.telefono), 1, 1, Qt.AlignTop)
-        self.b1.cuerpo.addLayout(g)
+        self.nota_fecha.setWordWrap(True)
+        self.b1.cuerpo.addWidget(Rejilla([
+            _campo("Festejado(s)", self.festejado), _campo("Lugar", self.lugar),
+            _campo("Fecha del evento", self.fecha_evento, self.nota_fecha),
+            _campo("Teléfono del cliente (WhatsApp)", self.telefono)], max_columnas=2, ancho_min=230))
         sig1 = PushButton(FIF.CHEVRON_RIGHT_MED, "Siguiente: paquete")
         sig1.clicked.connect(lambda: self.abrir_bloque(self.b2))
         self.b1.cuerpo.addWidget(sig1, 0, Qt.AlignRight)
@@ -138,16 +142,13 @@ class NuevoInterface(QWidget):
 
         # ---- ② Paquete ----
         self.b2 = Bloque(2, "Paquete")
-        gp = QGridLayout()
-        gp.setSpacing(8)
         self.tarjetas = {}
         destacado = cfg.get("paquete_destacado", "COMPLETO")
-        for i, (clave, paq) in enumerate(cfg["paquetes"].items()):
+        for clave, paq in cfg["paquetes"].items():
             t = TarjetaPaquete(clave, paq, destacado=(clave == destacado))
             t.elegida.connect(self.elegir_paquete)
             self.tarjetas[clave] = t
-            gp.addWidget(t, i // 2, i % 2)
-        self.b2.cuerpo.addLayout(gp)
+        self.b2.cuerpo.addWidget(Rejilla(list(self.tarjetas.values()), max_columnas=2, ancho_min=190, espacio=8))
         self.b2.cuerpo.addWidget(CaptionLabel("Incluye"))
         self.chips = QWidget()
         self.flow = FlowLayout(self.chips, needAni=False)
@@ -162,22 +163,19 @@ class NuevoInterface(QWidget):
 
         # ---- ③ Pago y captura ----
         self.b3 = Bloque(3, "Pago y captura")
-        g3 = QGridLayout()
-        g3.setHorizontalSpacing(12)
         self.total = Monto()
         self.reserva = Monto()
         self.fecha_pago = CalendarPicker()
         self.fecha_pago.setDateFormat("dd/MM/yyyy")
         self.fecha_pago.setDate(QDate.currentDate())
-        g3.addWidget(_campo("Precio del paquete", self.total), 0, 0)
-        g3.addWidget(_campo("Reserva / anticipo", self.reserva), 0, 1)
-        g3.addWidget(_campo("Fecha del pago", self.fecha_pago), 0, 2)
-        self.b3.cuerpo.addLayout(g3)
+        self.b3.cuerpo.addWidget(Rejilla([
+            _campo("Precio del paquete", self.total), _campo("Reserva / anticipo", self.reserva),
+            _campo("Fecha del pago", self.fecha_pago)], max_columnas=3, ancho_min=150))
         self.zona = ZonaCaptura(120)
         self.b3.cuerpo.addWidget(self.zona)
         fila = QHBoxLayout()
         b_subir = PushButton(FIF.PHOTO, "Subir imagen")
-        b_pegar = PushButton(FIF.PASTE, "Pegar (Ctrl+V)")
+        b_pegar = PushButton(FIF.PASTE, f"Pegar ({CTRL}V)")
         b_subir.clicked.connect(self.zona.buscar)
         b_pegar.clicked.connect(self.zona.pegar)
         fila.addWidget(b_subir)
@@ -193,13 +191,16 @@ class NuevoInterface(QWidget):
         cuerpo.addWidget(scroll, 46)
 
         # ================= Vista previa protagonista =================
-        panel = QFrame()
+        panel = self.panel_vista = QFrame()
         panel.setObjectName("panelVista")
         panel.setStyleSheet("#panelVista{background: rgba(0,0,0,0.18); border-left: 1px solid rgba(128,128,128,0.18);}")
         p = QVBoxLayout(panel)
         p.setContentsMargins(20, 22, 20, 12)
         p.setSpacing(8)
         cabv = QHBoxLayout()
+        self.b_volver = TransparentPushButton(FIF.LEFT_ARROW, "Datos")     # solo en ventanas angostas
+        self.b_volver.clicked.connect(lambda: self._ver_vista(False))
+        cabv.addWidget(self.b_volver)
         self.titulo_vista = StrongBodyLabel("Vista previa en vivo")
         self.ring = IndeterminateProgressRing()
         self.ring.setFixedSize(18, 18)
@@ -227,6 +228,7 @@ class NuevoInterface(QWidget):
         cabv.addWidget(self.b_ext)
         p.addLayout(cabv)
         self.estado = CaptionLabel("")
+        self.estado.setWordWrap(True)
         p.addWidget(self.estado)
         self.area = SmoothScrollArea()
         self.area.setStyleSheet("QScrollArea{background:transparent;border:none}")
@@ -245,7 +247,7 @@ class NuevoInterface(QWidget):
         barra.setFixedHeight(78)
         barra.setStyleSheet("#barraAcciones{background: rgba(128,128,128,0.08);"
                             "border-top: 1px solid rgba(128,128,128,0.22);}")
-        hb = QHBoxLayout(barra)
+        hb = self.hb_barra = QHBoxLayout(barra)
         hb.setContentsMargins(32, 8, 20, 8)
         hb.setSpacing(10)
         sv = QVBoxLayout()
@@ -257,6 +259,8 @@ class NuevoInterface(QWidget):
         hb.addLayout(sv)
         hb.addSpacing(16)
         self.resumen = CaptionLabel("")
+        self.resumen.setWordWrap(True)
+        self.resumen.setMinimumWidth(0)
         hb.addWidget(self.resumen, 1)
         self.btn_copiar = PushButton(FIF.COPY, "Copiar")
         self.btn_copiar.clicked.connect(self.copiar)
@@ -265,7 +269,7 @@ class NuevoInterface(QWidget):
         self.btn_wa.installEventFilter(ToolTipFilter(self.btn_wa))
         self.btn_wa.clicked.connect(self.whatsapp)
         self.btn_generar = PrimaryPushButton(FIF.ACCEPT, "Generar comprobante")
-        self.btn_generar.setToolTip("Ctrl+Enter")
+        self.btn_generar.setToolTip(f"{CTRL}Enter")
         self.btn_generar.installEventFilter(ToolTipFilter(self.btn_generar))
         self.btn_generar.setFixedHeight(40)
         self.btn_generar.setMinimumWidth(210)
@@ -314,6 +318,8 @@ class NuevoInterface(QWidget):
         self.total.setValue(int(paq["precio"]))
         if desde_usuario:
             self._cambio()
+            if not self.en_vivo.isChecked() and not (self.ultimo and not self.sin_generar):
+                self._mostrar_plantilla()      # sin vista en vivo: al menos la plantilla del paquete elegido
 
     def actualizar_precios(self):
         for clave, t in self.tarjetas.items():
@@ -434,25 +440,55 @@ class NuevoInterface(QWidget):
         self._ajustar_imagen()
 
     def _ajustar_imagen(self):
-        if not getattr(self, "pix", None) or self.pix.isNull():
+        if not getattr(self, "pix", None) or self.pix.isNull() or not self.panel_vista.isVisible():
             return
         vp = self.area.viewport().size()
+        dpr = self.devicePixelRatioF()          # pantallas Retina / 4K: la imagen se escala a sus píxeles reales
         if self.zoom:
             ancho = max(vp.width() - 8, 400) * 1.8
-            img = self.pix.scaledToWidth(int(ancho), Qt.SmoothTransformation)
+            img = self.pix.scaledToWidth(int(ancho * dpr), Qt.SmoothTransformation)
         else:
-            img = self.pix.scaled(vp.width() - 8, vp.height() - 8, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            img = self.pix.scaled(int((vp.width() - 8) * dpr), int((vp.height() - 8) * dpr),
+                                  Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        img.setDevicePixelRatio(dpr)
         self.lienzo.setPixmap(img)
-        self.lienzo.resize(img.size())
+        self.lienzo.resize(img.deviceIndependentSize().toSize())
 
     def _alternar_zoom(self):
         self.zoom = not self.zoom
         self.b_zoom.setIcon(FIF.ZOOM_OUT if self.zoom else FIF.ZOOM_IN)
         self._ajustar_imagen()
 
+    # ================= Tamaño de la ventana =================
+    def _ver_vista(self, si):
+        """En ventanas angostas se ve el formulario o la vista previa; este botón alterna."""
+        self.viendo_vista = si
+        self._acomodar()
+
+    def _acomodar(self):
+        ancho = self.width()
+        compacto = ancho < ANCHO_COMPACTO
+        if compacto != self.compacto:
+            self.compacto = compacto
+            self.b_ver_vista.setVisible(compacto)
+            self.b_volver.setVisible(compacto)
+            self.v_form.setContentsMargins(*((20, 18, 16, 16) if compacto else (32, 24, 20, 20)))
+        self.scroll_form.setVisible(not compacto or not self.viendo_vista)
+        self.panel_vista.setVisible(not compacto or self.viendo_vista)
+        corta = ancho < ANCHO_BARRA_CORTA
+        self.resumen.setVisible(not corta)
+        self.hb_barra.setContentsMargins(*((16, 8, 12, 8) if corta else (32, 8, 20, 8)))
+        self.btn_generar.setText("Generar" if corta else "Generar comprobante")
+        self.btn_generar.setMinimumWidth(130 if corta else 210)
+        QTimer.singleShot(0, self._ajustar_imagen)
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
-        QTimer.singleShot(0, self._ajustar_imagen)
+        self._acomodar()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._acomodar()
 
     # ================= Acciones =================
     def _botones_resultado(self):
@@ -463,14 +499,14 @@ class NuevoInterface(QWidget):
     def copiar(self):
         if self.ultimo:
             copiar_imagen(self.ultimo)
-            aviso(self, "success", "Copiado", "Pégalo en WhatsApp con Ctrl+V.")
+            aviso(self, "success", "Copiado", f"Pégalo en WhatsApp con {CTRL}V.")
 
     def whatsapp(self):
         if not self.ultimo:
             return
         copiar_imagen(self.ultimo)
         if abrir_whatsapp(self.telefono.text(), self.festejado.text()):
-            aviso(self, "success", "WhatsApp", "Se abrió el chat del cliente. Pega el comprobante con Ctrl+V.", 6000)
+            aviso(self, "success", "WhatsApp", f"Se abrió el chat del cliente. Pega el comprobante con {CTRL}V.", 6000)
         else:
             aviso(self, "warning", "Teléfono", "Revisa el teléfono del cliente (8 dígitos).")
 
@@ -495,10 +531,13 @@ class NuevoInterface(QWidget):
         self._estado_bloques()
         self._mostrar_plantilla()
         self.titulo_vista.setText("Vista previa en vivo")
+        self._ver_vista(False)
 
     def generar(self):
         f1, f3 = self._estado_bloques()
         if f1 or f3:
+            if self.compacto:
+                self._ver_vista(False)
             self.abrir_bloque(self.b1 if f1 else self.b3)
             self.zona.marcar_error("captura del pago" in f3)
             aviso(self, "warning", "Faltan datos", "Completa: " + ", ".join(f1 + f3) + ".")
@@ -516,8 +555,8 @@ class NuevoInterface(QWidget):
 
     def _fin(self):
         self.btn_generar.setEnabled(True)
-        self.btn_generar.setText("Generar comprobante")
         self.ring.hide()
+        self._acomodar()
 
     def _listo(self, ruta):
         self._fin()
@@ -538,10 +577,12 @@ class NuevoInterface(QWidget):
         self._botones_resultado()
         self.titulo_vista.setText("Comprobante generado")
         self.estado.setText(Path(ruta).name)
+        if self.compacto:
+            self._ver_vista(True)       # en ventanas angostas se muestra el comprobante terminado
         self._poner_imagen(ruta)
         copiar_imagen(ruta)
         aviso(self, "success", "Comprobante corregido" if corregido else "Comprobante listo",
-              "Guardado y copiado: pégalo en WhatsApp con Ctrl+V.", 7000, ruta_abrir=ruta)
+              f"Guardado y copiado: pégalo en WhatsApp con {CTRL}V.", 7000, ruta_abrir=ruta)
 
     def _fallo(self, msg):
         self._fin()

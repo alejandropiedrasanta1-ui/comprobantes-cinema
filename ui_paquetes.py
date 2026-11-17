@@ -1,13 +1,13 @@
 """Pantalla «Paquetes»: lo que incluye cada paquete y sus precios (editables)."""
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
-from qfluentwidgets import (BodyLabel, CaptionLabel, FluentIcon as FIF, PrimaryPushButton,
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from qfluentwidgets import (CaptionLabel, FluentIcon as FIF, PrimaryPushButton,
                             SimpleCardWidget, SmoothScrollArea, StrongBodyLabel, SubtitleLabel,
                             TitleLabel)
 
 import motor
-from ui_comun import COLOR_PAQUETE, NOMBRES_PAQUETE, Monto, aviso, q
+from ui_comun import COLOR_PAQUETE, NOMBRES_PAQUETE, Monto, Rejilla, aviso, q
 
 
 class _Tarjeta(SimpleCardWidget):
@@ -60,12 +60,11 @@ class PaquetesInterface(QWidget):
         cab.addWidget(guardar, 0, Qt.AlignVCenter)
         v.addLayout(cab)
 
-        g = QGridLayout()
-        g.setSpacing(14)
+        tarjetas = []
         self.precios = {}
         destacado = cfg.get("paquete_destacado", "COMPLETO")
         reserva = cfg.get("reserva_por_defecto", 600)
-        for i, (clave, paq) in enumerate(cfg["paquetes"].items()):
+        for clave, paq in cfg["paquetes"].items():
             card = _Tarjeta(COLOR_PAQUETE.get(clave, "#888888"))
             c = QVBoxLayout(card)
             c.setContentsMargins(24, 18, 20, 18)
@@ -100,12 +99,14 @@ class PaquetesInterface(QWidget):
                 fila_s.addWidget(punto, 0, Qt.AlignVCenter)
                 fila_s.addWidget(StrongBodyLabel(titulo_s))
                 if detalle:
-                    fila_s.addWidget(CaptionLabel(detalle.strip("()")), 0, Qt.AlignVCenter)
+                    det = CaptionLabel(detalle.strip("()"))
+                    det.setWordWrap(True)
+                    fila_s.addWidget(det, 1, Qt.AlignVCenter)
                 fila_s.addStretch(1)
                 c.addLayout(fila_s)
             c.addStretch(1)
-            g.addWidget(card, i // 2, i % 2)
-        v.addLayout(g)
+            tarjetas.append(card)
+        v.addWidget(Rejilla(tarjetas, max_columnas=2, ancho_min=380, espacio=14))
         nota = CaptionLabel("Para cambiar los servicios de un paquete se edita la plantilla PSD "
                             "(PROGRAMA\\config_default.json + crear_plantillas.py) y se vuelve a crear el programa.")
         nota.setWordWrap(True)

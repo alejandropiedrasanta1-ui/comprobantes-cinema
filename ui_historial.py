@@ -2,10 +2,9 @@
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QDate, Qt, Signal
-from PySide6.QtCore import QRectF
+from PySide6.QtCore import QDate, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter
-from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QHeaderView, QListWidgetItem,
+from PySide6.QtWidgets import (QAbstractItemView, QBoxLayout, QHBoxLayout, QHeaderView, QListWidgetItem,
                                QTableWidgetItem, QVBoxLayout, QWidget)
 from qfluentwidgets import (BodyLabel, CalendarPicker, CaptionLabel, FluentIcon as FIF,
                             HorizontalSeparator, IconWidget, IndeterminateProgressRing, ListWidget,
@@ -17,11 +16,11 @@ from qfluentwidgets import (BodyLabel, CalendarPicker, CaptionLabel, FluentIcon 
 
 import motor
 import registro
-from ui_comun import (COLOR_ESTADO, COLORES_AVATAR, Avatar, Kpi, Monto, NOMBRES_PAQUETE, Trabajo, ZonaCaptura, abrir, abrir_whatsapp,
-                      aviso, copiar_imagen, etiqueta_valor, faltan, iniciales, q)
+from ui_comun import (CTRL, COLOR_ESTADO, COLORES_AVATAR, Avatar, Kpi, Monto, NOMBRES_PAQUETE, Rejilla,
+                      Trabajo, ZonaCaptura, abrir, abrir_whatsapp, aviso, copiar_imagen, etiqueta_valor, faltan, iniciales, q)
 
 COLUMNAS = ["Cliente", "Fecha", "Paquete", "Pagado", "Saldo", "Estado"]
-COL_PAGADO, COL_ESTADO = 3, 5
+COL_FECHA, COL_PAQUETE, COL_PAGADO, COL_ESTADO = 1, 2, 3, 5
 ANCHOS = {1: 118, 2: 155, 3: 160, 4: 90, 5: 115}
 
 
@@ -111,30 +110,27 @@ class HistorialInterface(QWidget):
         raiz.setContentsMargins(0, 0, 0, 0)
         raiz.setSpacing(0)
 
-        izq = QWidget()
-        v = QVBoxLayout(izq)
+        izq = self.izq = QWidget()
+        v = self.v_izq = QVBoxLayout(izq)
         v.setContentsMargins(36, 28, 24, 24)
         v.setSpacing(14)
         cab = QHBoxLayout()
         tit = QVBoxLayout()
         tit.setSpacing(2)
         tit.addWidget(TitleLabel("Clientes y pagos"))
-        tit.addWidget(CaptionLabel("Saldos pendientes, abonos y comprobantes de cada cliente"))
-        cab.addLayout(tit)
-        cab.addStretch(1)
-        b_nuevo = PrimaryPushButton(FIF.ADD, "Nuevo comprobante")
-        b_nuevo.clicked.connect(lambda: self.pedir_nuevo.emit())
-        cab.addWidget(b_nuevo, 0, Qt.AlignVCenter)
+        sub = CaptionLabel("Saldos pendientes, abonos y comprobantes de cada cliente")
+        sub.setWordWrap(True)
+        tit.addWidget(sub)
+        cab.addLayout(tit, 1)
+        self.b_nuevo = PrimaryPushButton(FIF.ADD, "Nuevo comprobante")
+        self.b_nuevo.clicked.connect(lambda: self.pedir_nuevo.emit())
+        cab.addWidget(self.b_nuevo, 0, Qt.AlignVCenter)
         v.addLayout(cab)
 
-        kpis = QHBoxLayout()
-        kpis.setSpacing(12)
         self.k_cobrar = Kpi("Por cobrar", "#ff5a5f")
-        self.k_mes = Kpi("Eventos este mes")
-        self.k_comp = Kpi("Comprobantes emitidos")
-        for k in (self.k_cobrar, self.k_mes, self.k_comp):
-            kpis.addWidget(k)
-        v.addLayout(kpis)
+        self.k_mes = Kpi("Eventos del mes")
+        self.k_comp = Kpi("Comprobantes")
+        v.addWidget(Rejilla([self.k_cobrar, self.k_mes, self.k_comp], max_columnas=3, ancho_min=110))
 
         self.buscar = SearchLineEdit()
         self.buscar.setPlaceholderText("Buscar por nombre, teléfono, paquete o lugar…")
@@ -144,12 +140,13 @@ class HistorialInterface(QWidget):
         for nombre in ("Todos", "Reservado", "Abonado", "Pagado"):
             self.seg.addItem(nombre, nombre, onClick=lambda n=nombre: self._filtrar(n))
         self.seg.setCurrentItem("Todos")
-        self.seg.setFixedWidth(380)
-        fila_b = QHBoxLayout()
-        fila_b.setSpacing(12)
-        fila_b.addWidget(self.buscar, 1)
-        fila_b.addWidget(self.seg)
-        v.addLayout(fila_b)
+        self.seg.setMinimumWidth(300)
+        self.seg.setMaximumWidth(380)
+        self.fila_b = QBoxLayout(QBoxLayout.LeftToRight)       # en ventanas angostas, el filtro baja
+        self.fila_b.setSpacing(12)
+        self.fila_b.addWidget(self.buscar, 1)
+        self.fila_b.addWidget(self.seg)
+        v.addLayout(self.fila_b)
 
         self.tabla = TableWidget()
         self.tabla.setBorderVisible(True)
@@ -194,6 +191,7 @@ class HistorialInterface(QWidget):
         self.panel.setFixedWidth(360)
         scroll = SmoothScrollArea(self.panel)
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setStyleSheet("QScrollArea{background:transparent;border:none}")
         cont = QWidget()
         cont.setStyleSheet("background:transparent")
@@ -201,7 +199,7 @@ class HistorialInterface(QWidget):
         pv = QVBoxLayout(self.panel)
         pv.setContentsMargins(0, 0, 0, 0)
         pv.addWidget(scroll)
-        p = QVBoxLayout(cont)
+        p = self.p_panel = QVBoxLayout(cont)
         p.setContentsMargins(20, 24, 20, 20)
         p.setSpacing(8)
         cabd = QHBoxLayout()
@@ -234,17 +232,13 @@ class HistorialInterface(QWidget):
         self.lista.setFixedHeight(120)
         self.lista.itemDoubleClicked.connect(lambda it: abrir(it.data(Qt.UserRole)))
         p.addWidget(self.lista)
-        acciones = QHBoxLayout()
         self.b_ver = PushButton(FIF.VIEW, "Abrir")
         self.b_ver.clicked.connect(self._abrir_pago)
         self.b_copiar = PushButton(FIF.COPY, "Copiar")
         self.b_copiar.clicked.connect(self._copiar_pago)
         self.b_wa = PushButton(FIF.SEND, "WhatsApp")
         self.b_wa.clicked.connect(self._whatsapp)
-        acciones.addWidget(self.b_ver)
-        acciones.addWidget(self.b_copiar)
-        acciones.addWidget(self.b_wa)
-        p.addLayout(acciones)
+        p.addWidget(Rejilla([self.b_ver, self.b_copiar, self.b_wa], max_columnas=3, ancho_min=100, espacio=8))
         p.addWidget(HorizontalSeparator())
 
         self.t_abono = StrongBodyLabel("Registrar abono")
@@ -253,14 +247,11 @@ class HistorialInterface(QWidget):
         a = QVBoxLayout(self.caja_abono)
         a.setContentsMargins(0, 0, 0, 0)
         a.setSpacing(8)
-        fila_m = QHBoxLayout()
         self.monto = Monto()
         self.fecha = CalendarPicker()
         self.fecha.setDateFormat("dd/MM/yyyy")
         self.fecha.setDate(QDate.currentDate())
-        fila_m.addWidget(self.monto, 1)
-        fila_m.addWidget(self.fecha, 1)
-        a.addLayout(fila_m)
+        a.addWidget(Rejilla([self.monto, self.fecha], max_columnas=2, ancho_min=120, espacio=8))
         self.zona = ZonaCaptura(110)
         a.addWidget(self.zona)
         fila_z = QHBoxLayout()
@@ -291,9 +282,23 @@ class HistorialInterface(QWidget):
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
-        # Si la tabla queda angosta (menu abierto, ventana chica), se oculta «Pagado»
-        # para que el nombre del cliente siempre se lea; el detalle lo sigue mostrando.
-        self.tabla.setColumnHidden(COL_PAGADO, self.tabla.width() < 800)
+        ancho = self.width()
+        # el panel de detalle se angosta en ventanas chicas (laptops, MacBook)
+        self.panel.setFixedWidth(360 if ancho >= 1100 else (320 if ancho >= 900 else 290))
+        chico = ancho < 900
+        self.v_izq.setContentsMargins(*((20, 18, 16, 16) if chico else (36, 28, 24, 24)))
+        self.p_panel.setContentsMargins(*((14, 18, 14, 14) if chico else (20, 24, 20, 20)))
+        self.b_nuevo.setText("Nuevo" if ancho - self.panel.width() < 600 else "Nuevo comprobante")
+        self.fila_b.setDirection(QBoxLayout.TopToBottom if ancho - self.panel.width() < 640 else QBoxLayout.LeftToRight)
+        QTimer.singleShot(0, self._columnas)
+
+    def _columnas(self):
+        # Si la tabla queda angosta se ocultan columnas (el detalle las sigue mostrando),
+        # para que el nombre del cliente, el saldo y el estado siempre se lean.
+        ancho = self.tabla.viewport().width()
+        self.tabla.setColumnHidden(COL_PAGADO, ancho < 780)
+        self.tabla.setColumnHidden(COL_PAQUETE, ancho < 600)
+        self.tabla.setColumnHidden(COL_FECHA, ancho < 470)
 
     # ---------- datos ----------
     def showEvent(self, e):
@@ -408,7 +413,7 @@ class HistorialInterface(QWidget):
         ruta = self._pago_actual()
         if ruta and Path(ruta).exists():
             copiar_imagen(ruta)
-            aviso(self, "success", "Copiado", "Pégalo en WhatsApp con Ctrl+V.")
+            aviso(self, "success", "Copiado", f"Pégalo en WhatsApp con {CTRL}V.")
 
     def _whatsapp(self):
         c = self.actual
@@ -418,7 +423,7 @@ class HistorialInterface(QWidget):
         if ruta and Path(ruta).exists():
             copiar_imagen(ruta)
         if abrir_whatsapp(c.telefono, c.festejado):
-            aviso(self, "success", "WhatsApp", "Se abrió el chat del cliente. Pega el comprobante con Ctrl+V.", 6000)
+            aviso(self, "success", "WhatsApp", f"Se abrió el chat del cliente. Pega el comprobante con {CTRL}V.", 6000)
         else:
             aviso(self, "warning", "Teléfono", "Este cliente no tiene un teléfono válido.")
 
@@ -463,7 +468,7 @@ class HistorialInterface(QWidget):
         copiar_imagen(ruta)
         self.refrescar()
         aviso(self, "success", "Abono registrado",
-              f"Saldo: {q(d['saldo'])}. Comprobante copiado: pégalo en WhatsApp con Ctrl+V.", 7000,
+              f"Saldo: {q(d['saldo'])}. Comprobante copiado: pégalo en WhatsApp con {CTRL}V.", 7000,
               ruta_abrir=ruta)
 
     def _fallo(self, msg):

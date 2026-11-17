@@ -85,11 +85,17 @@ def _capturas(carpeta):
         QTimer.singleShot(ms, lazo.quit)
         lazo.exec()
 
-    for tema in ("Oscuro", "Claro"):
+    app.configurar_letra()
+    # (tema, tamaño): monitor grande, laptop / MacBook Air y la ventana más chica permitida
+    tamanos = [("Oscuro", "", (1380, 880)), ("Oscuro", "_laptop", (1180, 700)), ("Oscuro", "_chica", app.MINIMO),
+               ("Claro", "", (1380, 880))]
+    for tema, sufijo, tam in tamanos:
         aplicar_tema(tema)
         setThemeColor(QColor(app.COLOR_MARCA))
         v = app.Ventana(cfg, revisar=False)
-        v.resize(1380, 880)
+        v.setMicaEffectEnabled(False)   # con Mica (Windows 11) el fondo lo pinta Windows y no sale en la imagen
+        v.setMinimumSize(*app.MINIMO)
+        v.resize(*tam)
         v.move(60, 60)
         v.show()
         v.raise_()
@@ -106,13 +112,15 @@ def _capturas(carpeta):
                    ("5_ajustes", lambda: v.switchTo(v.ajustes))]
         if tema == "Claro":
             paginas = paginas[:1] + paginas[2:3]
+        elif sufijo:
+            paginas = [paginas[0], ("1b_vista", lambda: n._ver_vista(True)), paginas[2], paginas[3], paginas[4]]
         for nombre, accion in paginas:
             accion()
             if nombre == "3_clientes":
                 esperar(400)
                 v.historial.tabla.selectRow(1)
             esperar(1200)
-            archivo = carpeta / f"{nombre}_{tema.lower()}.png"
+            archivo = carpeta / f"{nombre}_{tema.lower()}{sufijo}.png"
             v.grab().save(str(archivo))  # la ventana completa, aunque la pantalla sea más chica
             print("captura:", archivo.name)
         v.close()

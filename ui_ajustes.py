@@ -11,7 +11,7 @@ from qfluentwidgets import (CaptionLabel, ComboBox, FluentIcon as FIF, PushButto
 import fuentes
 import motor
 import rutas
-from ui_comun import Monto, abrir, aviso
+from ui_comun import CTRL, Monto, abrir, aviso
 
 TEMAS = {"Oscuro": Theme.DARK, "Claro": Theme.LIGHT, "Automático (como el sistema)": Theme.AUTO}
 
@@ -113,8 +113,8 @@ class AjustesInterface(QWidget):
 
         modo = "Portable (todo se guarda junto al programa)" if rutas.PORTABLE else "Instalado"
         v.addWidget(CaptionLabel(f"Comprobantes Cinema Productions · versión {rutas.VERSION} · {modo}"))
-        v.addWidget(CaptionLabel("Atajos: Ctrl+N nuevo · Ctrl+Enter generar · Ctrl+V pegar captura · "
-                                 "Ctrl+F buscar cliente"))
+        v.addWidget(CaptionLabel(f"Atajos: {CTRL}N nuevo · {CTRL}Enter generar · {CTRL}V pegar captura · "
+                                 f"{CTRL}F buscar cliente"))
         v.addStretch(1)
 
     def showEvent(self, e):
