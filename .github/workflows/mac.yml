@@ -14,12 +14,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-latest       # Apple Silicon (M1, M2, M3, M4…)
+          # Regla: solo Apple Silicon (M1, M2, M3, M4…). No compilar para Mac Intel.
+          - runner: macos-latest
             arq: Apple Silicon
             opcional: false
-          - runner: macos-15-intel     # Mac con procesador Intel (si GitHub aún lo ofrece)
-            arq: Intel
-            opcional: true
     steps:
       - uses: actions/checkout@v7
 

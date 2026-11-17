@@ -10,7 +10,7 @@ CARPETAS (dentro de COMPROBANTE)
   INSTALADOR    solo los instaladores:
                   - Instalar Comprobantes Cinema (Windows) X.exe
                   - Instalar Comprobantes Cinema (Mac Apple Silicon) X.dmg
-                  - Instalar Comprobantes Cinema (Mac Intel) X.dmg
+                Solo se compila para Windows y Mac con Apple Silicon (no para Mac Intel).
 
 REQUISITO EN CADA COMPUTADORA
   - PhotoCraft instalado (el programa lo usa para editar los PSD).
@@ -38,9 +38,8 @@ Volver a crear el instalador (después de cambiar el programa o las plantillas):
 
 MAC
 ---
-Hay dos versiones en INSTALADOR (elige según el procesador de la Mac:  > Acerca de esta Mac):
-  - Instalar Comprobantes Cinema (Mac Apple Silicon) X.dmg   Mac con chip M1, M2, M3, M4…
-  - Instalar Comprobantes Cinema (Mac Intel) X.dmg           Mac con procesador Intel
+Solo para Mac con Apple Silicon (chip M1, M2, M3, M4…); no hay versión para Mac Intel:
+  - Instalar Comprobantes Cinema (Mac Apple Silicon) X.dmg
 Instalar:  abre el .dmg y haz doble clic en «Instalar Comprobantes». Se abre una ventana con los
            pasos y la barra de progreso: lo copia a Aplicaciones, lo fija en el Dock, abre
            Comprobantes, se cierra y expulsa el disco.

@@ -6,7 +6,7 @@
 // - Pasos: 1) copiar el programa a Aplicaciones (o a ~/Aplicaciones si no hay permiso), 2) fijarlo en el Dock,
 //   3) revisar que PhotoCraft esté instalado (si falta, avisa: el programa lo necesita para crear los comprobantes).
 //   instalar --demo | --demo-error      simula una instalación (para ver el diseño y sacar capturas)
-// Lo compila empaquetar/mac/construir_dmg.py en una Mac (swiftc, arm64 + x86_64 con lipo); Windows no puede.
+// Lo compila empaquetar/crear_instalador_mac.sh en una Mac (swiftc, solo arm64: Apple Silicon); Windows no puede.
 // =============================================================================================================================
 import AppKit
 import SwiftUI
@@ -395,11 +395,7 @@ final class Instalador: NSObject, NSApplicationDelegate {
             }
             return
         }
-        #if arch(arm64)
-        let mac = "Mac con Apple Silicon"
-        #else
-        let mac = "Mac con procesador Intel"
-        #endif
+        let mac = "Mac con Apple Silicon"   // regla: solo Apple Silicon
         let icono = NSImage(contentsOfFile: recursos + "/icono.png") ?? NSApp.applicationIconImage
         let vista = VistaInstalador(av: av, version: version, mac: mac, icono: icono, cerrar: { NSApp.terminate(nil) })
         let w = VentanaSinMarco(contentRect: NSRect(x: 0, y: 0, width: 900, height: 520), styleMask: [.borderless],

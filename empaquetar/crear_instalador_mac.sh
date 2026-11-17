@@ -13,17 +13,14 @@ SALIDA="$2"
 PY="${PYTHON:-python3}"
 command -v "$PY" >/dev/null 2>&1 || PY=python
 VERSION=$(cd .. && "$PY" -c "import rutas; print(rutas.VERSION)")
-TIPO=$([ "$(uname -m)" = "arm64" ] && echo "Apple Silicon" || echo "Intel")
+TIPO="Apple Silicon"   # regla: solo Mac con Apple Silicon, no Intel
 NOMBRE="Instalar Comprobantes.app"
 TMP="$(mktemp -d)"
 INST="$TMP/$NOMBRE"
 mkdir -p "$INST/Contents/MacOS" "$INST/Contents/Resources" "$SALIDA"
 
-# 1) La ventana del instalador: Swift, universal (Apple Silicon + Intel)
-for arq in arm64 x86_64; do
-  swiftc -swift-version 5 -O -parse-as-library -target "$arq-apple-macos13.0" mac/instalador_mac.swift -o "$TMP/instalar_$arq"
-done
-lipo -create "$TMP/instalar_arm64" "$TMP/instalar_x86_64" -output "$INST/Contents/MacOS/instalar"
+# 1) La ventana del instalador: Swift, solo Apple Silicon (arm64)
+swiftc -swift-version 5 -O -parse-as-library -target arm64-apple-macos13.0 mac/instalador_mac.swift -o "$INST/Contents/MacOS/instalar"
 chmod +x "$INST/Contents/MacOS/instalar"
 
 # 2) Info.plist de «Instalar Comprobantes»

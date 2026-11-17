@@ -26,8 +26,8 @@ Abre solo el tramo que necesites: Read con offset/limit, o Grep. No leas archivo
 - `comprobantes.spec` (57) — Receta de PyInstaller para Windows (carpeta con .exe) y Mac (.app)
 - `CREAR APP MAC.command` (37) — Crea en COMPROBANTE/INSTALADOR el instalador de Mac (ventana nativa, como CineSlide) · [1/3] Preparando entorno de Python (solo la primera vez:20 · [2/3] Empaquetando la app...:27 · [3/3] Creando el instalador de un clic...:30
 - `CREAR INSTALADOR WINDOWS.bat` (31) — Crea en COMPROBANTE\INSTALADOR · [1/2] Empaquetando el programa...:12 · [2/2] Creando el instalador (ventana propia, como CineS:15 · :error:27
-- `crear_instalador_mac.sh` (78) — Arma el instalador de Mac (mismo método que CineSlide) a partir de la app ya compilada con PyInstaller · 1) La ventana del instalador: Swift, universal (Apple Silicon +:22 · 2) Info.plist de «Instalar Comprobantes»:29 · 3) El programa va adentro, con el mismo ícono:52 · 4) Firma local (ad hoc), necesaria en Mac con Apple Silicon:58 · 5) El .dmg: ventana con fondo «Doble clic para instalar»:63
-- `LEEME.txt` (70) — COMPROBANTES CINEMA PRODUCTIONS - Cómo crear e instalar el programa
+- `crear_instalador_mac.sh` (75) — Arma el instalador de Mac (mismo método que CineSlide) a partir de la app ya compilada con PyInstaller · 1) La ventana del instalador: Swift, solo Apple Silicon (arm64):22 · 2) Info.plist de «Instalar Comprobantes»:26 · 3) El programa va adentro, con el mismo ícono:49 · 4) Firma local (ad hoc), necesaria en Mac con Apple Silicon:55 · 5) El .dmg: ventana con fondo «Doble clic para instalar»:60
+- `LEEME.txt` (69) — COMPROBANTES CINEMA PRODUCTIONS - Cómo crear e instalar el programa
 - `portable.spec` (49) — Versión PORTABLE
 
 ## herramientas
@@ -37,12 +37,12 @@ Abre solo el tramo que necesites: Read con offset/limit, o Grep. No leas archivo
 - `icono.svg` (33) — Ícono «Claqueta y recibo» — Comprobantes · Cinema Productions
 
 ## .github/workflows
-- `mac.yml` (115) · Instalar dependencias:30 · Compilar la ventana del instalador (Swift):33 · Probar la interfaz desde el código:38 · Compilar la app:41 · Probar la app compilada:45 · Capturas de pantalla:48 · Crear el instalador (.dmg con ventana nativa, como CineSlide):52 · Probar el instalador como lo haría el usuario:64
+- `mac.yml` (113) — Regla · Instalar dependencias:28 · Compilar la ventana del instalador (Swift):31 · Probar la interfaz desde el código:36 · Compilar la app:39 · Probar la app compilada:43 · Capturas de pantalla:46 · Crear el instalador (.dmg con ventana nativa, como CineSlide):50 · Probar el instalador como lo haría el usuario:62
 
 ## empaquetar/mac
 - `crear_fondo_dmg.py` (132) — Dibuja el fondo de la ventana del .dmg de Mac («Doble clic para instalar»), como el de CineSlide · fuente():21 · centrado():25 · linea_mixta():38 · fondo():47
 - `dmg_ajustes.py` (34) — Ajustes de dmgbuild para el .dmg de Mac (como el de CineSlide)
-- `instalador_mac.swift` (536) — Contents/MacOS/instalar de "Instalar Comprobantes.app" (la app del DMG) · **Color**:15 · numeroVersion:35 · versionDe:40 · appInstalada:44 · ejecutar:52 · **Avance**:67 · evento:77 · objetivo:95 · avanzar:103 · **BotonPildora**:110 · makeBody:112 · **VistaInstalador**:130 · heroe:160 · luz:195 · emblema:202 · columna:265 · barra:298 · fila:317 · pie:355 · **VentanaSinMarco**:370 · **Instalador**:375 · applicationDidFinishLaunching:390 · applicationShouldTerminate:422 · enviar:427 · empezar:432 · tic:476 · abrirYSalir:489 · expulsarDisco:497 · empezarDemo:508 · alimentarDemo:518 · **Principal**:528 · main:529
+- `instalador_mac.swift` (532) — Contents/MacOS/instalar de "Instalar Comprobantes.app" (la app del DMG) · **Color**:15 · numeroVersion:35 · versionDe:40 · appInstalada:44 · ejecutar:52 · **Avance**:67 · evento:77 · objetivo:95 · avanzar:103 · **BotonPildora**:110 · makeBody:112 · **VistaInstalador**:130 · heroe:160 · luz:195 · emblema:202 · columna:265 · barra:298 · fila:317 · pie:355 · **VentanaSinMarco**:370 · **Instalador**:375 · applicationDidFinishLaunching:390 · applicationShouldTerminate:418 · enviar:423 · empezar:428 · tic:472 · abrirYSalir:485 · expulsarDisco:493 · empezarDemo:504 · alimentarDemo:514 · **Principal**:524 · main:525
 
 ## empaquetar/windows
 - `construir_instalador.ps1` (76) — Arma el instalador de Windows (mismo método que CineSlide) · 1) versión y datos del archivo (Propiedades > Detalles):27 · 2) ícono de la ventana (256 px) a partir de recursos\icono.png:42 · 3) compilar (C# 5, .NET Framework 4):48 · 4) el programa en .zip:57 · 5) [instalador.exe][paquete.zip][posición Int64][CCPAQ001]:61
