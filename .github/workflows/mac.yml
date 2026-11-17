@@ -1,0 +1,58 @@
+name: Compilar para Mac
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  mac:
+    name: Mac ${{ matrix.arq }}
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.opcional }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest       # Apple Silicon (M1, M2, M3, M4…)
+            arq: Apple Silicon
+            opcional: false
+          - runner: macos-15-intel     # Mac con procesador Intel (si GitHub aún lo ofrece)
+            arq: Intel
+            opcional: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: python -m pip install --upgrade pip PySide6 PySide6-Fluent-Widgets Pillow pyinstaller
+
+      - name: Probar la interfaz desde el código
+        run: QT_QPA_PLATFORM=offscreen python generador.py --verificar
+
+      - name: Compilar la app
+        working-directory: empaquetar
+        run: python -m PyInstaller --noconfirm --clean --distpath dist-mac --workpath build-mac comprobantes.spec
+
+      - name: Probar la app compilada
+        run: QT_QPA_PLATFORM=offscreen "empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --verificar
+
+      - name: Crear el .dmg
+        run: |
+          VERSION=$(python -c "import rutas; print(rutas.VERSION)")
+          SUFIJO=$([ "$(uname -m)" = "arm64" ] && echo "Apple Silicon" || echo "Intel")
+          mkdir -p dmg
+          cp -R "empaquetar/dist-mac/Comprobantes Cinema.app" dmg/
+          ln -s /Applications dmg/Aplicaciones
+          hdiutil create -volname "Comprobantes Cinema" -srcfolder dmg -ov -format UDZO \
+            "Comprobantes Cinema (Mac ${SUFIJO}) ${VERSION}.dmg"
+          ls -lh *.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comprobantes-cinema-mac-${{ runner.arch }}
+          path: "*.dmg"
+          retention-days: 30
