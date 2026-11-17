@@ -13,6 +13,8 @@ VERSION = re.search(r'VERSION\s*=\s*"([^"]+)"', (RAIZ / "rutas.py").read_text(en
 datas = [
     (str(RAIZ / "config_default.json"), "."),
     (str(RAIZ / "recursos" / "icono.png"), "recursos"),
+    (str(RAIZ / "recursos" / "ilustracion_vacio.png"), "recursos"),
+    (str(RAIZ / "recursos" / "iconos"), "recursos/iconos"),   # íconos de la interfaz (Higgsfield)
 ]
 # Las fuentes van incluidas solo si están en la carpeta (en GitHub no se publican por licencia)
 if any((RAIZ / "recursos" / "fuentes").glob("*.*")):

@@ -1,13 +1,14 @@
-"""Ventana principal (estilo Fluent de Windows 11) con menú lateral."""
+"""Ventana principal: barra lateral con ícono y nombre de cada pantalla (logo arriba, Ajustes abajo)."""
 import os
 import sys
 
-from PySide6.QtCore import QLibraryInfo, QLocale, Qt, QTimer, QTranslator
-from PySide6.QtGui import QColor, QIcon, QKeySequence, QShortcut
+from PySide6.QtCore import QLibraryInfo, QLocale, QRectF, Qt, QTimer, QTranslator
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import QApplication, QLineEdit
-from qfluentwidgets import (FluentIcon as FIF, FluentTranslator, FluentWindow, MessageBox,
-                            NavigationAvatarWidget, NavigationItemPosition, setFontFamilies, setThemeColor)
+from qfluentwidgets import (FluentIcon as FIF, FluentTranslator, MSFluentWindow, MessageBox,
+                            NavigationItemPosition, NavigationWidget, setFontFamilies, setThemeColor)
 
+import estilo
 import motor
 import rutas
 from ui_ajustes import AjustesInterface, aplicar_tema
@@ -23,30 +24,53 @@ MINIMO = (760, 540)      # cabe en pantallas chicas: todo se reacomoda (ver Reji
 MARGEN_MAC = 84          # ancho de los botones rojo/amarillo/verde de macOS
 
 
-class Ventana(FluentWindow):
+class _Marca(NavigationWidget):
+    """Logo de la app arriba de la barra lateral, con un brillo rojo suave."""
+
+    def __init__(self, parent=None):
+        super().__init__(isSelectable=False, parent=parent)
+        self.pm = QPixmap(str(rutas.recurso("recursos/icono.png")))
+        self.setFixedSize(64, 62)
+        self.setToolTip("Comprobantes · Cinema Productions")
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
+        lado = 38
+        r = QRectF((self.width() - lado) / 2, (self.height() - lado) / 2, lado, lado)
+        p.setPen(Qt.NoPen)
+        for i, a in enumerate((26, 14, 7)):
+            p.setBrush(estilo.alfa(estilo.ROJO, a))
+            g = 3 + 4 * i
+            p.drawRoundedRect(r.adjusted(-g, -g, g, g), 12 + g, 12 + g)
+        dpr = self.devicePixelRatioF()
+        pm = self.pm.scaled(int(lado * dpr), int(lado * dpr), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        pm.setDevicePixelRatio(dpr)
+        p.drawPixmap(r.topLeft(), pm)
+        p.end()
+
+
+class Ventana(MSFluentWindow):
     def __init__(self, cfg, revisar=True):
         super().__init__()
         self.cfg = cfg
         self.revision = None
         self.setWindowTitle("Comprobantes · Cinema Productions")
         self.setWindowIcon(QIcon(str(rutas.recurso("recursos/icono.png"))))
-        if ES_MAC:
-            # deja libre la esquina de los botones rojo/amarillo/verde de macOS
-            self.navigationInterface.panel.vBoxLayout.setContentsMargins(0, 34, 0, 5)
+        # Fondo grafito parejo (sin Mica: en Windows 11 teñía la ventana con el fondo de pantalla)
+        self.setMicaEffectEnabled(False)
+        self.setCustomBackgroundColor(QColor("#F5F5F7"), QColor("#0F0F12"))
+        self.navigationInterface.setSelectedColor(QColor(estilo.ROJO), QColor(estilo.ROJO_CLARO))
 
         self.nuevo = NuevoInterface(cfg, self)
         self.historial = HistorialInterface(cfg, self)
         self.paquetes = PaquetesInterface(cfg, self)
         self.ajustes = AjustesInterface(cfg, self)
-        self.addSubInterface(self.nuevo, FIF.ADD, "Nuevo comprobante")
-        self.addSubInterface(self.historial, FIF.PEOPLE, "Clientes y pagos")
+        self.navigationInterface.addWidget("marca", _Marca(), lambda: self.switchTo(self.nuevo))
+        self.addSubInterface(self.nuevo, FIF.ADD, "Nuevo")
+        self.addSubInterface(self.historial, FIF.PEOPLE, "Clientes")
         self.addSubInterface(self.paquetes, FIF.SHOPPING_CART, "Paquetes")
-        self.navigationInterface.addWidget(
-            routeKey="marca",
-            widget=NavigationAvatarWidget("Cinema Productions", str(rutas.recurso("recursos/icono.png"))),
-            onClick=lambda: self.switchTo(self.ajustes),
-            position=NavigationItemPosition.BOTTOM)
-        self.addSubInterface(self.ajustes, FIF.SETTING, "Ajustes", NavigationItemPosition.BOTTOM)
+        self.addSubInterface(self.ajustes, FIF.SETTING, "Ajustes", position=NavigationItemPosition.BOTTOM)
 
         self.nuevo.registrado.connect(self.historial.refrescar)
         self.historial.pedir_nuevo.connect(lambda: self.switchTo(self.nuevo))

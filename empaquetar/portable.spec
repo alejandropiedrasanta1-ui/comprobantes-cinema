@@ -9,6 +9,8 @@ datas = [
     (str(RAIZ / "config_default.json"), "."),
     (str(RAIZ / "empaquetar" / "portable.flag"), "."),
     (str(RAIZ / "recursos" / "icono.png"), "recursos"),
+    (str(RAIZ / "recursos" / "ilustracion_vacio.png"), "recursos"),
+    (str(RAIZ / "recursos" / "iconos"), "recursos/iconos"),
 ]
 # Las fuentes van incluidas solo si están en la carpeta (en GitHub no se publican por licencia)
 if any((RAIZ / "recursos" / "fuentes").glob("*.*")):
