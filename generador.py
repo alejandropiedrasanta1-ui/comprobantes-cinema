@@ -271,7 +271,7 @@ def _prueba_vivo(carpeta, cli=None):
     anotar("Nombre en el paquete nuevo:")
     escribir(n.festejado, "Daniel y Sofía", 125)
     foto("3_paquete")
-    paso("Zoom (vista más grande y nítida)", n._alternar_zoom, lambda vi: vi[6] is True)
+    paso("Zoom (vista más grande y nítida)", n._alternar_zoom, lambda vi: vi[6] > 1)
     foto("4_zoom")
     n._alternar_zoom()
     esperar(800)

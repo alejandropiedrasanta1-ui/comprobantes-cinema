@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QBoxLayout, QGraphicsOpacityEffect, QHBoxLayout, QHeaderView,
                                QLabel, QListWidgetItem, QStyle, QStyledItemDelegate, QTableWidgetItem, QVBoxLayout,
                                QWidget)
-from qfluentwidgets import (CalendarPicker, CaptionLabel, FlowLayout, FluentIcon as FIF,
+from qfluentwidgets import (CaptionLabel, FlowLayout, FluentIcon as FIF,
                             IndeterminateProgressRing, ListItemDelegate, ListWidget, MessageBox, PrimaryPushButton, PushButton,
                             SearchLineEdit, SmoothScrollArea, StrongBodyLabel, SubtitleLabel,
                             TableItemDelegate, TableWidget, TitleLabel, TransparentPushButton, isDarkTheme)
@@ -19,8 +19,9 @@ import motor
 import registro
 import rutas
 from estilo import Cifra, Icono, Pildora, Separador, Tarjeta
-from ui_comun import (CTRL, COLOR_ESTADO, COLOR_PAQUETE, Avatar, BarraPago, Kpi, Monto, NOMBRES_PAQUETE, Rejilla,
-                      Trabajo, ZonaCaptura, abrir, abrir_whatsapp, aviso, color_avatar, copiar_imagen, faltan,
+from ui_comun import (CTRL, COLOR_ESTADO, COLOR_PAQUETE, Avatar, BarraPago, CampoFecha, Kpi, Monto, NOMBRES_PAQUETE, Rejilla,
+                      Trabajo, ZonaCaptura, abrir, abrir_carpeta_si_toca, abrir_whatsapp, aviso, color_avatar,
+                      copiar_imagen, faltan,
                       iniciales, q)
 
 COLUMNAS = ["Cliente", "Evento", "Paquete", "Saldo", "Estado"]
@@ -512,8 +513,7 @@ class HistorialInterface(QWidget):
         a.setContentsMargins(0, 0, 0, 0)
         a.setSpacing(8)
         self.monto = Monto()
-        self.fecha = CalendarPicker()
-        self.fecha.setDateFormat("dd/MM/yyyy")
+        self.fecha = CampoFecha()
         self.fecha.setDate(QDate.currentDate())
         a.addWidget(Rejilla([self.monto, self.fecha], max_columnas=2, ancho_min=120, espacio=8))
         self.zona = ZonaCaptura(92)
@@ -797,6 +797,7 @@ class HistorialInterface(QWidget):
         aviso(self, "success", "Abono registrado",
               f"Saldo: {q(d['saldo'])}. Comprobante copiado: pégalo en WhatsApp con {CTRL}V.", 7000,
               ruta_abrir=ruta)
+        abrir_carpeta_si_toca(self.cfg, ruta)
 
     def _fallo(self, msg):
         self._fin()

@@ -268,8 +268,15 @@ class AjustesInterface(QWidget):
         self.l_calidad.setFixedWidth(30)
         self.calidad.valueChanged.connect(lambda n: self.l_calidad.setText(str(n)))
         self.calidad.sliderReleased.connect(self.guardar_calidad)
+        self.abrir_carpeta = SwitchButton()
+        self.abrir_carpeta.setOnText("")
+        self.abrir_carpeta.setOffText("")
+        self.abrir_carpeta.setChecked(bool(cfg.get("abrir_carpeta", True)))
+        self.abrir_carpeta.checkedChanged.connect(self.cambiar_abrir_carpeta)
         self._grupo(v, "comprobantes", "Comprobantes", [
             f_carpeta,
+            _fila("carpeta", "Abrir la carpeta al terminar",
+                  "Al generar un comprobante se abre su carpeta con el archivo marcado", self.abrir_carpeta),
             _fila("recibo", "Reserva por defecto", "Monto que se sugiere al crear un comprobante", self.reserva),
             _fila("galeria", "Calidad del JPG", "Más alto = más nítido y más pesado (92 recomendado)",
                   self.calidad, self.l_calidad)])
@@ -478,6 +485,10 @@ class AjustesInterface(QWidget):
             aviso(self, "warning", "No encontré las fuentes",
                   "En esa carpeta no están LEMONMILK-Bold.otf, GetVoIP Grotesque.otf ni MYRIADPRO-*.OTF.", 8000)
         self.revisar_fuentes()
+
+    def cambiar_abrir_carpeta(self, si):
+        self.cfg["abrir_carpeta"] = si
+        motor.guardar_preferencia("abrir_carpeta", si)
 
     def cambiar_animaciones(self, si):
         estilo.ANIMAR = si

@@ -6,6 +6,7 @@
   "paquete_destacado": "COMPLETO",
   "vista_en_vivo": true,
   "calidad_jpg": 92,
+  "abrir_carpeta": true,
   "plantilla": "PLANTILLAS/COMPROBANTE.psd",
   "paquetes": {
     "ESENCIAL": {

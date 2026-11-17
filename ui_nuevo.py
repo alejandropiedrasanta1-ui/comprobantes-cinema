@@ -7,12 +7,12 @@ import math
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import (QDate, QEasingCurve, QPoint, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation,
+from PySide6.QtCore import (QDate, QEasingCurve, QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation,
                             Signal)
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
-from qfluentwidgets import (Action, CalendarPicker, CaptionLabel, FlowLayout, FluentIcon as FIF, RoundMenu,
-                            IndeterminateProgressRing, LineEdit, PrimaryPushButton, PushButton,
+from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from qfluentwidgets import (Action, CaptionLabel, FlowLayout, FluentIcon as FIF, RoundMenu,
+                            IndeterminateProgressRing, LineEdit, PrimaryPushButton, PushButton, Slider,
                             SegmentedWidget, SmoothScrollArea, StrongBodyLabel,
                             TitleLabel, ToolTipFilter, TransparentPushButton, TransparentToolButton,
                             isDarkTheme)
@@ -23,14 +23,15 @@ from lista import MAX_SERVICIOS
 import registro
 import rutas
 from estilo import Atajo, Cifra, Pildora
-from ui_comun import (CTRL, NOMBRES_PAQUETE, Bloque, Monto, Pasos, Rejilla, TarjetaPaquete, Trabajo, ZonaCaptura,
+from ui_comun import (CTRL, NOMBRES_PAQUETE, Bloque, CampoFecha, Monto, Pasos, Rejilla, TarjetaPaquete, Trabajo, ZonaCaptura,
                       servicio_legible,
-                      abrir, abrir_whatsapp, aviso, copiar_imagen, digitos_telefono, faltan, fecha_larga,
+                      abrir, abrir_carpeta_si_toca, abrir_whatsapp, aviso, copiar_imagen, digitos_telefono, faltan, fecha_larga,
                       formatear_telefono, q)
 
 ANCHO_COMPACTO = 900     # por debajo: se ve el formulario o la vista previa (botón para cambiar), no los dos
 ANCHO_BARRA_CORTA = 780  # por debajo: la barra inferior se simplifica
 MARGEN_LIENZO = 22       # espacio alrededor del comprobante para su sombra
+ZOOM_MIN, ZOOM_MAX = 1.0, 4.0   # zoom de la vista previa: 1 = ajustada al panel
 
 
 def _campo(titulo, widget, nota=None):
@@ -624,7 +625,7 @@ class NuevoInterface(QWidget):
         self._hilos_vista = set()   # hilos vivos: se sueltan recién cuando terminan del todo
         self.vista_ruta = None
         self.n_vista = 0
-        self.zoom = False
+        self.zoom = 1.0             # zoom de la vista previa (1 = ajustada al panel)
         self.compacto = None
         self.viendo_vista = False
         self.apretado = False       # ventana baja: formulario con menos aire para que quepa sin scroll
@@ -682,8 +683,7 @@ class NuevoInterface(QWidget):
         self.lugar = LineEdit()
         self.lugar.setPlaceholderText("Ej. Hotel Camino Real, Guatemala")
         self.lugar.setClearButtonEnabled(True)
-        self.fecha_evento = CalendarPicker()
-        self.fecha_evento.setDateFormat("dd/MM/yyyy")
+        self.fecha_evento = CampoFecha()         # se escribe de corrido; el calendario es opcional
         self.fecha_evento.setDate(QDate.currentDate())
         self.nota_fecha = CaptionLabel("")
         self.telefono = LineEdit()
@@ -735,8 +735,7 @@ class NuevoInterface(QWidget):
         self.b3 = Bloque(3, "Pago y captura", "recibo")
         self.total = Monto()
         self.reserva = Monto()
-        self.fecha_pago = CalendarPicker()
-        self.fecha_pago.setDateFormat("dd/MM/yyyy")
+        self.fecha_pago = CampoFecha()
         self.fecha_pago.setDate(QDate.currentDate())
         self.b3.cuerpo.addWidget(Rejilla([
             _campo("Precio total", self.total), _campo("Reserva / anticipo", self.reserva),
@@ -775,15 +774,35 @@ class NuevoInterface(QWidget):
         self.ring.hide()
         cabv.addWidget(self.ring)
         cabv.addStretch(1)
-        self.b_zoom = TransparentToolButton(FIF.ZOOM_IN)
-        self.b_zoom.setToolTip("Ampliar / ajustar a la ventana")
-        self.b_zoom.installEventFilter(ToolTipFilter(self.b_zoom))
-        self.b_zoom.clicked.connect(self._alternar_zoom)
+        # Zoom: deslizador (100 % = ajustado al panel), − / +, y la rueda del mouse sobre el comprobante
+        self.b_menos = TransparentToolButton(FIF.ZOOM_OUT)
+        self.b_mas = TransparentToolButton(FIF.ZOOM_IN)
+        self.deslizador_zoom = Slider(Qt.Horizontal)
+        self.deslizador_zoom.setRange(int(ZOOM_MIN * 100), int(ZOOM_MAX * 100))
+        self.deslizador_zoom.setSingleStep(10)
+        self.deslizador_zoom.setPageStep(50)
+        self.deslizador_zoom.setValue(100)
+        self.deslizador_zoom.setFixedWidth(120)
+        self.deslizador_zoom.valueChanged.connect(lambda v: self._poner_zoom(v / 100))
+        self.l_zoom = CaptionLabel("100 %")
+        self.l_zoom.setFixedWidth(40)
+        self.l_zoom.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        for b, paso in ((self.b_menos, -0.25), (self.b_mas, 0.25)):
+            b.setFixedSize(28, 28)
+            b.clicked.connect(lambda _=False, d=paso: self._poner_zoom(self.zoom + d))
+        consejo = "Zoom de la vista previa: rueda del mouse sobre el comprobante, arrastrar para moverse, doble clic para ajustar"
+        for w in (self.b_menos, self.deslizador_zoom, self.b_mas, self.l_zoom):
+            w.setToolTip(consejo)
+            w.installEventFilter(ToolTipFilter(w))
         self.b_ext = TransparentToolButton(FIF.FULL_SCREEN)
         self.b_ext.setToolTip("Abrir en el visor de imágenes")
         self.b_ext.installEventFilter(ToolTipFilter(self.b_ext))
         self.b_ext.clicked.connect(lambda: abrir(self._imagen_actual()))
-        cabv.addWidget(self.b_zoom)
+        cabv.addWidget(self.b_menos)
+        cabv.addWidget(self.deslizador_zoom)
+        cabv.addWidget(self.b_mas)
+        cabv.addWidget(self.l_zoom)
+        cabv.addSpacing(4)
         cabv.addWidget(self.b_ext)
         p.addLayout(cabv)
         self.estado = CaptionLabel("")
@@ -797,6 +816,9 @@ class NuevoInterface(QWidget):
         self.lienzo.setStyleSheet("background:transparent")
         self.area.setWidget(self.lienzo)
         self.area.setWidgetResizable(False)
+        self._arrastre = None                  # punto donde empezó a arrastrarse el comprobante ampliado
+        for w in (self.lienzo, self.area.viewport()):
+            w.installEventFilter(self)
         p.addWidget(self.area, 1)
         cuerpo.addWidget(panel, 56)
         self.velo = _Velo(panel)          # «generando» y «listo» animados sobre la vista previa
@@ -1131,40 +1153,92 @@ class NuevoInterface(QWidget):
         self.pix = QPixmap.fromImage(QImage(str(ruta)))
         self._ajustar_imagen()
 
-    def _lado_vista(self):
-        """Lado mayor (en píxeles reales) que necesita la vista para verse nítida en este panel:
-        PhotoCraft la pinta de ese tamaño y no más grande (así tarda menos)."""
+    def _tam_ajustado(self):
+        """Ancho y alto (px lógicos) del comprobante ajustado al panel: el 100 % del zoom."""
         vp = self.area.viewport().size()
         m = 2 * MARGEN_LIENZO
-        prop = 3508 / 2480   # las plantillas son A4 vertical
-        ancho = max(vp.width() - m, 400) * (1.8 if self.zoom else 1)
-        alto = ancho * prop if self.zoom else min(max(vp.height() - m, 400), ancho * prop)
+        prop = 3508 / 2480   # la plantilla es A4 vertical
+        ancho = min(max(vp.width() - m, 60), max(vp.height() - m, 60) / prop)
+        return ancho, ancho * prop
+
+    def _lado_vista(self):
+        """Lado mayor (en píxeles reales) que necesita la vista para verse nítida en este panel con el zoom
+        actual: PhotoCraft la pinta de ese tamaño y no más grande (así tarda menos)."""
+        _, alto = self._tam_ajustado()
+        alto = max(alto, 400) * self.zoom
         return int(max(600, min(alto * self.devicePixelRatioF(), motor.SesionPhotoCraft.LADO_MAX)))
 
     def _ajustar_imagen(self):
         if not getattr(self, "pix", None) or self.pix.isNull() or not self.panel_vista.isVisible():
             return
-        vp = self.area.viewport().size()
-        m = 2 * MARGEN_LIENZO
         dpr = self.devicePixelRatioF()          # pantallas Retina / 4K: la imagen se escala a sus píxeles reales
-        if self.zoom:
-            ancho = max(vp.width() - m, 400) * 1.8
-            img = self.pix.scaledToWidth(int(ancho * dpr), Qt.SmoothTransformation)
-        else:
-            img = self.pix.scaled(int(max(vp.width() - m, 60) * dpr), int(max(vp.height() - m, 60) * dpr),
-                                  Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        ancho, alto = self._tam_ajustado()
+        img = self.pix.scaled(int(ancho * self.zoom * dpr), int(alto * self.zoom * dpr), Qt.KeepAspectRatio,
+                              Qt.SmoothTransformation)
         img.setDevicePixelRatio(dpr)
         self.lienzo.poner(img)
+        self.lienzo.setCursor(Qt.OpenHandCursor if self.zoom > 1.001 else Qt.ArrowCursor)
         if self.velo.isVisible():
             self.velo.cubrir()
         if (self.en_vivo.isChecked() and self.vista_ruta and self._imagen_actual() == self.vista_ruta
                 and max(self.pix.width(), self.pix.height()) + 48 < self._lado_vista()):
             self.temporizador.start()   # la ventana creció o hay zoom: pedir la vista más nítida
 
-    def _alternar_zoom(self):
-        self.zoom = not self.zoom
-        self.b_zoom.setIcon(FIF.ZOOM_OUT if self.zoom else FIF.ZOOM_IN)
+    def _poner_zoom(self, factor, ancla=None):
+        """Cambia el zoom (1 = ajustado al panel) manteniendo quieto el punto bajo el mouse (ancla, en
+        coordenadas del visor) o el centro de lo que se ve."""
+        factor = round(min(ZOOM_MAX, max(ZOOM_MIN, factor)), 2)
+        if abs(factor - self.zoom) < 0.005:
+            return
+        vp = self.area.viewport()
+        ancla = ancla or QPointF(vp.width() / 2, vp.height() / 2)
+        h, v = self.area.horizontalScrollBar(), self.area.verticalScrollBar()
+        lw, lh = max(self.lienzo.width(), 1), max(self.lienzo.height(), 1)
+        px = (ancla.x() - self.lienzo.x()) / lw    # el punto bajo el mouse, en proporción del comprobante
+        py = (ancla.y() - self.lienzo.y()) / lh    # (la posición del lienzo ya incluye el desplazamiento)
+        self.zoom = factor
+        self.deslizador_zoom.blockSignals(True)
+        self.deslizador_zoom.setValue(int(round(factor * 100)))
+        self.deslizador_zoom.blockSignals(False)
+        self.l_zoom.setText(f"{int(round(factor * 100))} %")
         self._ajustar_imagen()
+        QApplication.processEvents()        # que el área conozca el tamaño nuevo antes de mover las barras
+        h.setValue(int(px * self.lienzo.width() - ancla.x()))
+        v.setValue(int(py * self.lienzo.height() - ancla.y()))
+
+    def _alternar_zoom(self):
+        """Doble clic (o la prueba de la vista en vivo): ajustado ↔ 200 %."""
+        self._poner_zoom(1.0 if self.zoom > 1.001 else 2.0)
+
+    def eventFilter(self, obj, e):
+        if obj in (self.lienzo, self.area.viewport()):
+            t = e.type()
+            if t == QEvent.Wheel and getattr(self, "pix", None):      # rueda: zoom hacia el puntero
+                pasos = e.angleDelta().y() / 120
+                if pasos:
+                    ancla = self.area.viewport().mapFrom(obj, e.position().toPoint()) if obj is self.lienzo \
+                        else e.position().toPoint()
+                    self._poner_zoom(self.zoom * (1.15 ** pasos), QPointF(ancla))
+                return True
+            if t == QEvent.MouseButtonDblClick and e.button() == Qt.LeftButton:
+                self._alternar_zoom()
+                return True
+            if t == QEvent.MouseButtonPress and e.button() == Qt.LeftButton and self.zoom > 1.001:
+                self._arrastre = (e.globalPosition(), self.area.horizontalScrollBar().value(),
+                                  self.area.verticalScrollBar().value())
+                self.lienzo.setCursor(Qt.ClosedHandCursor)
+                return True
+            if t == QEvent.MouseMove and self._arrastre:
+                inicio, hx, vy = self._arrastre
+                d = e.globalPosition() - inicio
+                self.area.horizontalScrollBar().setValue(int(hx - d.x()))
+                self.area.verticalScrollBar().setValue(int(vy - d.y()))
+                return True
+            if t == QEvent.MouseButtonRelease and self._arrastre:
+                self._arrastre = None
+                self.lienzo.setCursor(Qt.OpenHandCursor)
+                return True
+        return super().eventFilter(obj, e)
 
     # ================= Tamaño de la ventana =================
     def _revisar_alto(self):
@@ -1335,6 +1409,7 @@ class NuevoInterface(QWidget):
                                  f"Guardado y copiado · pégalo en WhatsApp con {CTRL}V", 2600)
         aviso(self, "success", "Comprobante corregido" if corregido else "Comprobante listo",
               f"Guardado y copiado: pégalo en WhatsApp con {CTRL}V.", 7000, ruta_abrir=ruta)
+        abrir_carpeta_si_toca(self.cfg, ruta)
 
     def _fallo(self, msg):
         self._fin()

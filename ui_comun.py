@@ -1,6 +1,7 @@
 """Piezas compartidas de la interfaz: zona de captura, tarjetas, bloques, avisos, WhatsApp."""
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -8,14 +9,16 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
-from PySide6.QtCore import QEasingCurve, QMimeData, QPointF, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtCore import QDate, QEasingCurve, QEvent, QMimeData, QPointF, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtGui import (QColor, QDesktopServices, QFont, QImage, QImageReader, QLinearGradient, QPainter,
                            QPainterPath, QPen, QPixmap)
-from PySide6.QtWidgets import (QApplication, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLayout,
+from PySide6.QtWidgets import (QApplication, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy,
                                QVBoxLayout, QWidget)
-from qfluentwidgets import (BodyLabel, CaptionLabel, FluentIcon as FIF, InfoBar,
-                            InfoBarPosition, PushButton, SpinBox, StrongBodyLabel, SubtitleLabel,
-                            TransparentToolButton, isDarkTheme, themeColor)
+from qfluentwidgets import (BodyLabel, CaptionLabel, FluentIcon as FIF, Flyout, FlyoutAnimationType,
+                            InfoBar, InfoBarPosition, LineEdit, PushButton, SpinBox, StrongBodyLabel, SubtitleLabel,
+                            ToolTipFilter, TransparentToolButton, isDarkTheme, themeColor)
+from qfluentwidgets.components.date_time.fast_calendar_view import FastCalendarView
+from qfluentwidgets.components.widgets.line_edit import LineEditButton
 
 import estilo
 import fuentes
@@ -77,6 +80,29 @@ def iniciales(nombre):
 def abrir(ruta):
     if ruta and Path(ruta).exists():
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(ruta)))
+
+
+def mostrar_en_carpeta(ruta):
+    """Abre la carpeta del archivo con el archivo ya marcado (Explorador en Windows, Finder en Mac)."""
+    ruta = Path(ruta) if ruta else None
+    if not ruta or not ruta.exists():
+        return
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen(f'explorer /select,"{ruta}"')
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", str(ruta)])
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(ruta.parent)))
+    except OSError:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(ruta.parent)))
+
+
+def abrir_carpeta_si_toca(cfg, ruta, espera_ms=900):
+    """Tras generar: abre la carpeta del comprobante (Ajustes › «Abrir la carpeta al terminar»). Espera un
+    poco para que primero se vea el «¡Comprobante listo!»."""
+    if cfg.get("abrir_carpeta", True):
+        QTimer.singleShot(espera_ms, lambda: mostrar_en_carpeta(ruta))
 
 
 def copiar_imagen(ruta):
@@ -415,6 +441,107 @@ class ZonaCaptura(QWidget):
             if url.toLocalFile().lower().endswith(EXT_IMAGEN):
                 self.usar(url.toLocalFile())
                 return
+
+
+class CampoFecha(QWidget):
+    """Fecha fácil y rápida (en vez del calendario, que era lento y obligaba a pasar mes por mes):
+    - se escribe de corrido: «20022027» → 20/02/2027 (las barras ya están; al entrar se selecciona todo);
+    - ↑ / ↓ (o la rueda del mouse con el campo activo) cambian el día, el mes o el año donde está el cursor;
+    - el botón del calendario la elige con el mouse (calendario rápido, se cierra al elegir).
+    Misma API que CalendarPicker: getDate(), setDate(), dateChanged (solo con una fecha completa y válida)."""
+    dateChanged = Signal(QDate)
+    FORMATO = "dd/MM/yyyy"
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._fecha = QDate.currentDate()
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(4)
+        self.edit = LineEdit()
+        self.edit.setInputMask("99/99/9999")      # con máscara se escribe encima: las barras se saltan solas
+        self.edit.setText(self._fecha.toString(self.FORMATO))
+        self.edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.edit.textEdited.connect(self._escrito)
+        self.edit.editingFinished.connect(self._terminar)
+        self.edit.installEventFilter(self)
+        self.edit.setToolTip("Escribe la fecha de corrido (día, mes, año) · ↑ ↓ cambian el día, mes o año")
+        self.edit.installEventFilter(ToolTipFilter(self.edit))
+        h.addWidget(self.edit, 1)
+        # el botón del calendario va dentro del campo (como el del buscador): la fecha cabe aunque la
+        # columna sea angosta
+        self.b_cal = LineEditButton(FIF.CALENDAR, self.edit)
+        self.b_cal.setToolTip("Elegir en el calendario")
+        self.b_cal.installEventFilter(ToolTipFilter(self.b_cal))
+        self.b_cal.clicked.connect(self._calendario)
+        self.edit.hBoxLayout.addWidget(self.b_cal, 0, Qt.AlignRight)
+        self.edit.setTextMargins(0, 0, 30, 0)
+        self.edit.setMinimumWidth(126)
+
+    # ---- API como la de CalendarPicker ----
+    def getDate(self):
+        return QDate(self._fecha)
+
+    def setDate(self, fecha):
+        fecha = QDate(fecha)
+        if not fecha.isValid():
+            return
+        cambio = fecha != self._fecha
+        self._fecha = fecha
+        if self.edit.text() != fecha.toString(self.FORMATO):
+            self.edit.setText(fecha.toString(self.FORMATO))
+        self.edit.setError(False)
+        if cambio:
+            self.dateChanged.emit(QDate(fecha))
+
+    def setDateFormat(self, formato):
+        pass   # siempre dd/MM/aaaa
+
+    # ---- edición ----
+    def _escrito(self, texto):
+        fecha = QDate.fromString(texto, self.FORMATO)
+        completo = all(c.isdigit() for c in texto.replace("/", ""))
+        self.edit.setError(completo and not fecha.isValid())   # p. ej. 31/02: en rojo hasta corregirla
+        if fecha.isValid() and fecha != self._fecha:
+            self._fecha = fecha
+            self.dateChanged.emit(QDate(fecha))
+
+    def _terminar(self):
+        if not QDate.fromString(self.edit.text(), self.FORMATO).isValid():   # incompleta o imposible:
+            self.edit.setText(self._fecha.toString(self.FORMATO))           # vuelve la última buena
+        self.edit.setError(False)
+
+    def _sumar(self, paso):
+        pos = self.edit.cursorPosition()
+        f = self._fecha
+        f = f.addDays(paso) if pos < 3 else f.addMonths(paso) if pos < 6 else f.addYears(paso)
+        self.setDate(f)
+        self.edit.setCursorPosition(pos)
+
+    def eventFilter(self, obj, e):
+        if obj is self.edit:
+            t = e.type()
+            if t == QEvent.FocusIn:                          # al entrar: todo seleccionado, se escribe encima
+                QTimer.singleShot(0, self.edit.selectAll)
+            elif t == QEvent.KeyPress and e.key() in (Qt.Key_Up, Qt.Key_Down):
+                self._sumar(1 if e.key() == Qt.Key_Up else -1)
+                return True
+            elif t == QEvent.Wheel and self.edit.hasFocus():
+                pasos = e.angleDelta().y() // 120
+                if pasos:
+                    self._sumar(1 if pasos > 0 else -1)
+                return True
+        return super().eventFilter(obj, e)
+
+    def _calendario(self):
+        vista = FastCalendarView(self.window())
+        vista.setDate(self._fecha)
+        flyout = Flyout.make(vista, self.edit, self.window(), FlyoutAnimationType.DROP_DOWN)
+
+        def elegida(d):
+            self.setDate(d)
+            flyout.close()
+        vista.dateChanged.connect(elegida)
 
 
 class Rejilla(QWidget):
