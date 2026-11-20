@@ -17,11 +17,10 @@ datas = [
     (str(RAIZ / "recursos" / "iconos"), "recursos/iconos"),   # íconos de la interfaz (Higgsfield)
     (str(RAIZ / "recursos" / "ilustracion_vacio_claro.png"), "recursos"),
 ]
-# Las fuentes del diseño (recursos/fuentes, también en el repositorio: van en Windows y en Mac)
-if any((RAIZ / "recursos" / "fuentes").glob("*.*")):
-    datas.append((str(RAIZ / "recursos" / "fuentes"), "recursos/fuentes"))
-datas += [(str(p), "PLANTILLAS") for p in sorted((RAIZ / "PLANTILLAS").glob("*.psd"))]
-datas += [(str(p), "PLANTILLAS") for p in sorted((RAIZ / "PLANTILLAS").glob("*.json"))]   # medidas de la lista
+# El diseño del comprobante (lo dibuja el programa, sin PhotoCraft): fondo, íconos y medidas, y las letras.
+# El PSD (90 MB) ya no va en el instalador: solo sirve para exportar este diseño en desarrollo.
+datas.append((str(RAIZ / "recursos" / "fuentes"), "recursos/fuentes"))
+datas.append((str(RAIZ / "PLANTILLAS" / "DISENO"), "PLANTILLAS/DISENO"))
 datas += [(str(p), "PLANTILLAS") for p in sorted((RAIZ / "PLANTILLAS").glob("VISTA PREVIA*.jpg"))]
 
 a = Analysis(
@@ -29,7 +28,7 @@ a = Analysis(
     pathex=[str(RAIZ)],
     datas=datas,
     # scipy/numpy/colorthief: solo para el efecto acrílico opcional de Fluent-Widgets (no se usa)
-    excludes=["tkinter", "crear_plantillas", "scipy", "numpy", "colorthief"],
+    excludes=["tkinter", "crear_plantillas", "photocraft", "scipy", "numpy", "colorthief"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

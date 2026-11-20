@@ -1,0 +1,451 @@
+{
+ "hoja": [
+  2480,
+  3508
+ ],
+ "textos": {
+  "fecha": {
+   "transform": [
+    1.5519367221717544,
+    0.0,
+    0.0,
+    1.546213356913785,
+    496.15117133319166,
+    1055.2724271074653
+   ],
+   "fuente": "LEMONMILK-Bold",
+   "familia": "LEMON MILK",
+   "pt": 9.895098686218262,
+   "color": "#000000",
+   "interlineado_pt": 43.17890167236328,
+   "escala_h": 1.0,
+   "tracking": 0.0,
+   "alineacion": "Left",
+   "texto": "FECHA: 1/01/2026",
+   "caja": [
+    500,
+    1001,
+    1116,
+    1059
+   ]
+  },
+  "tema": {
+   "transform": [
+    3.7640922016727063,
+    0.0,
+    0.0,
+    3.750210659837223,
+    608.5498537871338,
+    1409.3674810266828
+   ],
+   "fuente": "MyriadPro-Bold",
+   "familia": "Myriad Pro",
+   "pt": 6.399641036987305,
+   "color": "#000000",
+   "interlineado_pt": 14.398605346679688,
+   "escala_h": 1.0,
+   "tracking": 0.0,
+   "alineacion": "Left",
+   "texto": "BODA (COMPLETO) - 1 DE ENERO",
+   "caja": [
+    615,
+    1340,
+    2053,
+    1422
+   ]
+  },
+  "nombre_lugar": {
+   "transform": [
+    3.7640922016727063,
+    0.0,
+    0.0,
+    3.750210659837223,
+    611.5498537871338,
+    1476.3674810266828
+   ],
+   "fuente": "MyriadPro-Bold",
+   "familia": "Myriad Pro",
+   "pt": 3.7331230640411377,
+   "color": "#000000",
+   "interlineado_pt": 14.398605346679688,
+   "escala_h": 1.0,
+   "tracking": 0.0,
+   "alineacion": "Left",
+   "texto": "Nombre del festejado | Lugar",
+   "caja": [
+    615,
+    1432,
+    1364,
+    1491
+   ]
+  },
+  "contacto": {
+   "transform": [
+    1.115768923970429,
+    0.0,
+    0.0,
+    1.111654095701891,
+    1437.4864365067676,
+    1092.1557133660547
+   ],
+   "fuente": "MyriadPro-Bold",
+   "familia": "Myriad Pro",
+   "pt": 14.248998641967773,
+   "color": "#000000",
+   "interlineado_pt": 12.598780632019043,
+   "escala_h": 1.0,
+   "tracking": 0.0,
+   "alineacion": "Left",
+   "texto": "+502 0000 0000",
+   "caja": [
+    1440,
+    1048,
+    1906,
+    1093
+   ]
+  },
+  "reserva": {
+   "transform": [
+    1.0,
+    0.0,
+    0.0,
+    1.0,
+    476.0,
+    2911.0
+   ],
+   "fuente": "LEMONMILK-Bold",
+   "familia": "LEMON MILK",
+   "pt": 15.99999713897705,
+   "color": "#000000",
+   "interlineado_pt": 14.398605346679688,
+   "escala_h": 1.0,
+   "tracking": 0.0,
+   "alineacion": "Left",
+   "texto": "RESERVA CON:",
+   "caja": [
+    480,
+    2857,
+    1003,
+    2913
+   ]
+  },
+  "reserva_monto": {
+   "transform": [
+    1.0,
+    0.0,
+    0.0,
+    1.0,
+    1595.5,
+    2906.5
+   ],
+   "fuente": "LEMONMILK-Bold",
+   "familia": "LEMON MILK",
+   "pt": 15.99999713897705,
+   "color": "#000000",
+   "interlineado_pt": 14.398605346679688,
+   "escala_h": 1.0,
+   "tracking": 0.0,
+   "alineacion": "Left",
+   "texto": "Q600",
+   "caja": [
+    1597,
+    2852,
+    1802,
+    2917
+   ]
+  },
+  "saldo_monto": {
+   "transform": [
+    1.0,
+    0.0,
+    0.0,
+    1.0,
+    1700.1100502687418,
+    3362.2772499205025
+   ],
+   "fuente": "LEMONMILK-Bold",
+   "familia": "LEMON MILK",
+   "pt": 18.0,
+   "color": "#000000",
+   "interlineado_pt": 14.398605346679688,
+   "escala_h": 1.0,
+   "tracking": 0.0,
+   "alineacion": "Center",
+   "texto": "Q2,900",
+   "caja": [
+    1545,
+    3301,
+    1856,
+    3377
+   ]
+  },
+  "saldo": {
+   "transform": [
+    1.0,
+    0.0,
+    0.0,
+    1.0,
+    867.6100502687418,
+    3368.7772499205025
+   ],
+   "fuente": "LEMONMILK-Bold",
+   "familia": "LEMON MILK",
+   "pt": 18.0,
+   "color": "#000000",
+   "interlineado_pt": 14.398605346679688,
+   "escala_h": 1.0,
+   "tracking": 0.0,
+   "alineacion": "Center",
+   "texto": "SALDO PENDIENTE:",
+   "caja": [
+    480,
+    3308,
+    1254,
+    3371
+   ]
+  }
+ },
+ "lista": {
+  "transform": [
+   0.6694010773557378,
+   0.0,
+   8.290030528330393e-17,
+   0.6694010773557377,
+   600.3654099788264,
+   1776.671450205571
+  ],
+  "fuente": "LEMONMILK-Bold",
+  "familia": "LEMON MILK",
+  "pt": 6.674699783325195,
+  "color": "#000000",
+  "interlineado_pt": 13.708099365234375,
+  "escala_h": 1.0,
+  "tracking": 0.0,
+  "alineacion": "Left",
+  "texto": "\nFotos ilimitadas\n(Sin límite de horas)\n\nCobertura en\n(Maquillaje - ceremonia - fiesta)\n\nÁlbum de fotos\n(12 páginas)\n\nVideo profesional\n(Tráiler para redes sociales)\n\nVideo largo\n(30 min - 45 min de video)\n\nVideo con dron\n(Según condiciones del lugar)\n\nVideo con fotos\n(Fotos del evento)\n\nBuzón de audios\n(Mensajes de tus invitados)\n\nMemoria USB y link",
+  "caja": [
+   601,
+   1757,
+   1435,
+   2725
+  ]
+ },
+ "piezas": {
+  "raya_saldo": [
+   364,
+   3291,
+   1383,
+   3387
+  ],
+  "boda": [
+   345,
+   1213,
+   538,
+   1512
+  ],
+  "xv": [
+   287,
+   1198,
+   575,
+   1489
+  ],
+  "icono_video_fotos": [
+   388,
+   2437,
+   470,
+   2507
+  ],
+  "icono_video": [
+   388,
+   2120,
+   470,
+   2177
+  ],
+  "icono_cabina360": [
+   456,
+   2337,
+   527,
+   2413
+  ],
+  "icono_album": [
+   384,
+   2008,
+   474,
+   2067
+  ],
+  "icono_dron": [
+   372,
+   2325,
+   486,
+   2380
+  ],
+  "icono_camara": [
+   341,
+   1786,
+   517,
+   1847
+  ],
+  "icono_galeria": [
+   370,
+   2179,
+   489,
+   2221
+  ],
+  "icono_buzon": [
+   392,
+   2560,
+   467,
+   2627
+  ],
+  "icono_enmarcada": [
+   398,
+   2168,
+   461,
+   2232
+  ],
+  "icono_video_largo": [
+   397,
+   2226,
+   460,
+   2295
+  ],
+  "icono_cabina_fotos": [
+   386,
+   2159,
+   472,
+   2241
+  ],
+  "icono_zancos": [
+   407,
+   2159,
+   451,
+   2241
+  ],
+  "icono_telefono": [
+   383,
+   2159,
+   475,
+   2241
+  ],
+  "icono_espejo": [
+   406,
+   2159,
+   451,
+   2241
+  ],
+  "icono_backdrop": [
+   392,
+   2159,
+   465,
+   2241
+  ],
+  "icono_cabezones": [
+   400,
+   2159,
+   458,
+   2241
+  ],
+  "icono_chispa": [
+   435,
+   2165,
+   535,
+   2260
+  ],
+  "icono_cobertura": [
+   377,
+   1883,
+   481,
+   1987
+  ],
+  "icono_usb": [
+   382,
+   2659,
+   476,
+   2754
+  ]
+ },
+ "captura": [
+  1790,
+  1752,
+  495,
+  970
+ ],
+ "iconos": {
+  "camara": [
+   168,
+   58
+  ],
+  "cobertura": [
+   114,
+   114
+  ],
+  "video_fotos": [
+   77,
+   66
+  ],
+  "album": [
+   86,
+   56
+  ],
+  "video": [
+   79,
+   55
+  ],
+  "usb": [
+   89,
+   89
+  ],
+  "dron": [
+   109,
+   52
+  ],
+  "cabina360": [
+   71,
+   76
+  ],
+  "chispa": [
+   100,
+   95
+  ],
+  "galeria": [
+   118.0,
+   40.64
+  ],
+  "buzon": [
+   72.17,
+   64.0
+  ],
+  "enmarcada": [
+   61.83,
+   64.0
+  ],
+  "video_largo": [
+   59.67,
+   64.0
+  ],
+  "cabina_fotos": [
+   85.94,
+   82.0
+  ],
+  "zancos": [
+   44.08,
+   82.0
+  ],
+  "telefono": [
+   91.11,
+   82.0
+  ],
+  "espejo": [
+   44.42,
+   82.0
+  ],
+  "backdrop": [
+   72.43,
+   82.0
+  ],
+  "cabezones": [
+   57.4,
+   82.0
+  ]
+ }
+}

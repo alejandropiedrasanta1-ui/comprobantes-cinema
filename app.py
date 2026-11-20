@@ -1,18 +1,17 @@
 """Ventana principal: barra lateral con ícono y nombre de cada pantalla (logo arriba, Ajustes abajo)."""
-import os
 import sys
 
 from PySide6.QtCore import QLibraryInfo, QLocale, QRectF, Qt, QTimer, QTranslator
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import QApplication, QLineEdit
-from qfluentwidgets import (FluentIcon as FIF, FluentTranslator, MSFluentWindow, MessageBox,
+from qfluentwidgets import (FluentIcon as FIF, FluentTranslator, MSFluentWindow,
                             NavigationItemPosition, NavigationWidget, setFontFamilies, setThemeColor)
 
+import dibujo
 import estilo
 import motor
 import rutas
 from ui_ajustes import AjustesInterface, aplicar_tema
-from ui_comun import Revision, aviso
 from ui_historial import HistorialInterface
 from ui_nuevo import NuevoInterface
 from ui_paquetes import PaquetesInterface
@@ -51,10 +50,10 @@ class _Marca(NavigationWidget):
 
 
 class Ventana(MSFluentWindow):
-    def __init__(self, cfg, revisar=True):
+    def __init__(self, cfg, revisar=True):   # (revisar: ya no hace falta, se deja por compatibilidad)
         super().__init__()
         self.cfg = cfg
-        self.revision = None
+        dibujo.preparar()   # letras y diseño del comprobante (una vez, ≈0,1 s): en el hilo principal
         estilo.ANIMAR = bool(cfg.get("animaciones", True))
         setThemeColor(QColor(COLOR_MARCA))      # rojo de la marca siempre (también en pruebas y capturas)
         self.setWindowTitle("Comprobantes · Cinema Productions")
@@ -77,7 +76,6 @@ class Ventana(MSFluentWindow):
         self.nuevo.registrado.connect(self.historial.refrescar)
         self.historial.pedir_nuevo.connect(lambda: self.switchTo(self.nuevo))
         self.paquetes.precios_cambiados.connect(self.nuevo.actualizar_precios)
-        self.ajustes.photocraft_cambiado.connect(self.revisar_entorno)
         self.ajustes.vista_cambiada.connect(self.nuevo.poner_en_vivo)
         self.nuevo.en_vivo.checkedChanged.connect(
             lambda si: self.ajustes.vivo.isChecked() != si and self.ajustes.vivo.setChecked(si))
@@ -88,11 +86,7 @@ class Ventana(MSFluentWindow):
             QShortcut(QKeySequence(tecla), self, activated=self._generar)
 
         self.ajustar_a_pantalla()
-        if revisar:   # PhotoCraft de la vista en vivo se abre cuando termina la revisión de fuentes
-            self.nuevo.revisando = True   # desde ya: la primera vista (al abrir) espera a la revisión
-            QTimer.singleShot(150, self.revisar_entorno)   # tras pintar la ventana; la revisión va en otro hilo
-        else:
-            QTimer.singleShot(150, self.nuevo._calentar_vista)
+        QTimer.singleShot(0, self.nuevo._render_vista)   # la primera vista, apenas se ve la ventana
 
     def ajustar_a_pantalla(self):
         """Tamaño según la pantalla (sin la barra de menú ni el Dock / la barra de tareas): cabe completa en una
@@ -140,25 +134,6 @@ class Ventana(MSFluentWindow):
         else:
             self.switchTo(self.nuevo)
             self.nuevo.pegar()
-
-    def revisar_entorno(self):
-        if not os.path.isfile(self.cfg.get("photocraft_cli") or ""):
-            self.nuevo.revision_terminada()   # nada que revisar: la vista no espera
-            caja = MessageBox("Falta PhotoCraft",
-                              "Este programa usa PhotoCraft para crear los comprobantes y no lo encontré.\n\n"
-                              "Si ya está instalado, indica dónde está.", self)
-            caja.yesButton.setText("Buscar PhotoCraft")
-            caja.cancelButton.setText("Más tarde")
-            if caja.exec():
-                self.switchTo(self.ajustes)
-                self.ajustes.ubicar_photocraft()
-            return
-        self.revision = Revision(self.cfg)
-        self.revision.listo.connect(lambda m: aviso(self.nuevo, "info", "Fuentes", m, 6000))
-        # la vista en vivo espera a la revisión: si se instalan fuentes, PhotoCraft se abre ya con ellas
-        self.nuevo.revisando = True
-        self.revision.finished.connect(self.nuevo.revision_terminada)
-        self.revision.start()
 
 
 def configurar_letra():

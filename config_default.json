@@ -1,5 +1,4 @@
 {
-  "photocraft_cli": "auto",
   "carpeta_salida": "auto",
   "plantilla_base": "DISEÑOS ORIGINALES/COMPROBANTE - COMPLETO.psd",
   "reserva_por_defecto": 600,
@@ -7,7 +6,6 @@
   "vista_en_vivo": true,
   "calidad_jpg": 92,
   "abrir_carpeta": true,
-  "plantilla": "PLANTILLAS/COMPROBANTE.psd",
   "paquetes": {
     "ESENCIAL": {
       "precio": 1500,
@@ -78,9 +76,6 @@
     {"clave": "cabezones", "titulo": "Show de cabezones", "icono": "cabezones",
      "opciones": [["1 hora", 1600], ["2 horas", 2400], ["3 horas", 3700]]}
   ],
-  "sustitutos_fuente": {
-    "Myriad Pro": { "fuente": "Open Sans", "estilo": "Bold", "tamano": 0.91, "ancho": 101 }
-  },
   "eventos": {
     "Boda": "BODA",
     "XV años": "XV"

@@ -5,7 +5,6 @@ Derecha: lienzo punteado con la vista previa, que se actualiza sola mientras esc
 Abajo: barra fija con el saldo y los botones Copiar / WhatsApp / Generar."""
 import math
 import tempfile
-import threading
 import time
 from pathlib import Path
 
@@ -33,6 +32,7 @@ from ui_comun import (CTRL, NOMBRES_PAQUETE, Bloque, CampoFecha, Monto, Pasos, R
 ANCHO_COMPACTO = 900     # por debajo: se ve el formulario o la vista previa (botón para cambiar), no los dos
 ANCHO_BARRA_CORTA = 780  # por debajo: la barra inferior se simplifica
 MARGEN_LIENZO = 22       # espacio alrededor del comprobante para su sombra
+LADO_MAX = 3508          # alto real del comprobante: la vista en vivo nunca se dibuja más grande
 ZOOM_MIN, ZOOM_MAX = 1.0, 4.0   # zoom de la vista previa: 1 = ajustada al panel
 
 
@@ -718,7 +718,6 @@ class NuevoInterface(QWidget):
         self._hilos_vista = set()   # hilos vivos: se sueltan recién cuando terminan del todo
         self.vista_ruta = None
         self.n_vista = 0
-        self.revisando = False      # la ventana revisa las fuentes al abrir: la vista en vivo espera
         self.zoom = 1.0             # zoom de la vista previa (1 = ajustada al panel); el que se ve ahora
         self._zoom_meta = 1.0       # a dónde va (la rueda anima de self.zoom hacia aquí)
         self._zoom_ancla = QPointF()
@@ -904,7 +903,7 @@ class NuevoInterface(QWidget):
         self.b_ext = TransparentToolButton(FIF.FULL_SCREEN)
         self.b_ext.setToolTip("Abrir en el visor de imágenes")
         self.b_ext.installEventFilter(ToolTipFilter(self.b_ext))
-        self.b_ext.clicked.connect(lambda: abrir(self._imagen_actual()))
+        self.b_ext.clicked.connect(lambda: abrir(self._archivo_actual()))
         cabv.addWidget(self.b_menos)
         cabv.addWidget(self.deslizador_zoom)
         cabv.addWidget(self.b_mas)
@@ -975,7 +974,7 @@ class NuevoInterface(QWidget):
 
         # ================= Señales =================
         # Vista en vivo: cada tecla pide la vista de inmediato (el temporizador en 0 solo junta los cambios
-        # que llegan a la vez, p. ej. al pegar o limpiar). Si PhotoCraft aún pinta la anterior, la nueva
+        # que llegan a la vez, p. ej. al pegar o limpiar). Si aún se dibuja la anterior, la nueva
         # espera su turno con los datos más recientes; el tope evita que una racha de teclas la posponga.
         self.temporizador = QTimer(self)
         self.temporizador.setSingleShot(True)
@@ -1000,22 +999,6 @@ class NuevoInterface(QWidget):
         self._botones_resultado()
         self._mostrar_plantilla()
         self._cambio(programar=False)
-
-    def revision_terminada(self):
-        """La ventana terminó de revisar (e instalar) las fuentes: sale la vista que esperaba, o se deja
-        PhotoCraft listo para la primera tecla."""
-        self.revisando = False
-        if self.vista_pendiente and not self.vista_ocupada:
-            self._render_vista()
-        else:
-            self._calentar_vista()
-
-    def _calentar_vista(self):
-        """PhotoCraft listo antes de la primera tecla (al terminar de revisar las fuentes)."""
-        if self.en_vivo.isChecked() and not self.vista_ocupada and self.vista_ruta is None:
-            # hilo de Python (daemon) y no QThread: si se cierra el programa mientras tanto, no lo traba
-            threading.Thread(target=motor.calentar_vista, daemon=True,
-                             args=(self._datos(para_vista=True), self.cfg, self._lado_vista())).start()
 
     # ================= Bloques y estado =================
     def abrir_bloque(self, bloque):
@@ -1201,10 +1184,7 @@ class NuevoInterface(QWidget):
             return
         # Bandera propia y no isRunning(): «listo» llega cuando el hilo aún no termina run(), y con
         # isRunning() la vista siguiente quedaba en espera sin que nadie la lanzara (vista congelada).
-        # Mientras se revisan las fuentes (al abrir) también espera: la lanza revision_terminada().
-        if self.vista_ocupada or self.revisando:
-            if self.revisando and self.vista_ruta is None:
-                self.estado.setText("Preparando la vista previa…")
+        if self.vista_ocupada:
             self.vista_pendiente = True
             return
         self.vista_pendiente = False
@@ -1246,7 +1226,8 @@ class NuevoInterface(QWidget):
             self.estado.setText(texto)
         hilo = self.vista_trabajo   # una vista a la vez: es el que acaba de avisar
         propia = hilo is not None and Path(ruta).stem == Path(str(hilo.destino)).stem
-        self._poner_imagen(ruta, hilo.imagen if propia else None)
+        self.vista_imagen = hilo.imagen if propia else None   # en memoria: el archivo se escribe al abrirla
+        self._poner_imagen(ruta, self.vista_imagen)
         if self.vista_pendiente:
             self._render_vista()
         else:
@@ -1275,6 +1256,13 @@ class NuevoInterface(QWidget):
             return self.ultimo
         return self.vista_ruta
 
+    def _archivo_actual(self):
+        """El archivo de lo que se ve; la vista en vivo vive en memoria y se guarda recién aquí."""
+        ruta = self._imagen_actual()
+        if ruta and ruta == self.vista_ruta and getattr(self, "vista_imagen", None) is not None:
+            motor.guardar_jpg(self.vista_imagen, ruta, 92)
+        return ruta
+
     def _poner_imagen(self, ruta, imagen=None):
         # QImage y no QPixmap(ruta): QPixmap guarda en caché por nombre y hora (en segundos) y,
         # con la vista en vivo rápida, podía mostrar la imagen anterior del mismo archivo.
@@ -1293,10 +1281,10 @@ class NuevoInterface(QWidget):
 
     def _lado_vista(self):
         """Lado mayor (en píxeles reales) que necesita la vista para verse nítida en este panel con el zoom
-        actual: PhotoCraft la pinta de ese tamaño y no más grande (así tarda menos)."""
+        actual: se dibuja de ese tamaño y no más grande (así tarda menos)."""
         _, alto = self._tam_ajustado()
         alto = max(alto, 400) * self.zoom
-        return int(max(600, min(alto * self.devicePixelRatioF(), motor.SesionPhotoCraft.LADO_MAX)))
+        return int(max(600, min(alto * self.devicePixelRatioF(), LADO_MAX)))
 
     def _zoom_animandose(self):
         return self._ani_zoom.state() == QAbstractAnimation.Running
@@ -1313,7 +1301,7 @@ class NuevoInterface(QWidget):
         self.lienzo.fuente = self.pix
         if self.zoom > 1.001 and self.pix.height() < h - 1:
             # ampliada más que la imagen: se dibuja al vuelo (igual de nítida que escalarla antes, sin la
-            # pausa ni una copia enorme en memoria); PhotoCraft manda luego una más grande
+            # pausa ni una copia enorme en memoria); luego se dibuja una más grande
             self.lienzo.escalar(w / dpr, h / dpr)
         else:
             if abs(self.pix.height() - h) <= 1 and abs(self.pix.width() - w) <= 2:
@@ -1373,7 +1361,7 @@ class NuevoInterface(QWidget):
 
     def _zoom_listo(self):
         """El zoom llegó (o el deslizador se soltó): la imagen nítida de ese tamaño y, si hace falta, una
-        vista más grande de PhotoCraft."""
+        vista más grande."""
         if self._zoom_animandose():
             return
         self.zoom = self._zoom_meta
@@ -1557,10 +1545,10 @@ class NuevoInterface(QWidget):
         self.btn_generar.setEnabled(False)
         self.btn_generar.setText("Generando…")
         self.ring.show()
-        self.estado.setText("PhotoCraft está creando el comprobante…")
+        self.estado.setText("Creando el comprobante…")
         if self.compacto:
             self._ver_vista(True)
-        self.velo.mostrar("cargando", "Creando el comprobante…", "PhotoCraft está armando el JPG")
+        self.velo.mostrar("cargando", "Creando el comprobante…", "Guardando el JPG")
         self.trabajo = Trabajo(self.datos, self.cfg)
         self.trabajo.listo.connect(self._listo)
         self.trabajo.fallo.connect(self._fallo)

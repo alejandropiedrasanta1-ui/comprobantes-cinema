@@ -3,7 +3,7 @@
 El comprobante dibuja la lista de servicios al generarse, así los cambios se ven en el próximo comprobante."""
 import json
 
-from PySide6.QtCore import QPoint, QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (Action, BodyLabel, CaptionLabel, ComboBox, FluentIcon as FIF, LineEdit,
                             MessageBoxBase, PrimaryPushButton, PushButton, RoundMenu, SmoothScrollArea,
@@ -153,6 +153,19 @@ class PaquetesInterface(QWidget):
 
         self.precios, self.listas, self.titulos_lista, self.restablecer, self.agregar = {}, {}, {}, {}, {}
         self.filas = {}
+        # Las tarjetas se arman después de abrir la ventana (o al entrar a la página): así el programa abre antes
+        self.armada = False
+        QTimer.singleShot(400, self._armar)
+
+    def showEvent(self, e):
+        self._armar()
+        super().showEvent(e)
+
+    def _armar(self):
+        if self.armada:
+            return
+        self.armada = True
+        cfg, v = self.cfg, self.v
         tarjetas = [self._tarjeta(clave) for clave in cfg["paquetes"]]
         self.rejilla = Rejilla(tarjetas, max_columnas=4, ancho_min=236, espacio=16, validas=(1, 2, 4),
                                misma_altura=True)

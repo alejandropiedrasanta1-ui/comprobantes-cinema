@@ -43,6 +43,14 @@ jobs:
       - name: Probar la app compilada
         run: '"empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --verificar'
 
+      # Un comprobante de cada paquete con la app compilada (letras y diseño incluidos, sin PhotoCraft):
+      # los JPG quedan en las capturas para revisarlos.
+      - name: Probar los comprobantes (Mac)
+        run: |
+          mkdir -p capturas/autoprueba
+          "empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --autoprueba "$PWD/capturas/autoprueba/informe.txt" || { cat capturas/autoprueba/informe.txt; exit 1; }
+          cat capturas/autoprueba/informe.txt
+
       - name: Capturas de pantalla
         continue-on-error: true
         run: '"empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --capturas "$PWD/capturas"'
@@ -59,13 +67,12 @@ jobs:
           path: salida/*.dmg
           retention-days: 30
 
-      # La Mac de GitHub no tiene PhotoCraft: se usa uno simulado (herramientas/photocraft_simulado.py) que
-      # responde los mismos comandos. Prueba la vista en vivo de la app compilada escribiendo como un usuario.
-      - name: Probar la vista en vivo (PhotoCraft simulado)
+      # El comprobante lo dibuja la app (sin PhotoCraft): se prueba la vista en vivo de la app compilada
+      # escribiendo como un usuario, igual que en Windows.
+      - name: Probar la vista en vivo
         timeout-minutes: 6
         run: |
-          chmod +x herramientas/photocraft_simulado.py
-          "empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --prueba-vivo "$PWD/capturas/vivo" --cli "$PWD/herramientas/photocraft_simulado.py"
+          "empaquetar/dist-mac/Comprobantes Cinema.app/Contents/MacOS/Comprobantes Cinema" --prueba-vivo "$PWD/capturas/vivo"
 
       - name: Probar el instalador como lo haría el usuario
         timeout-minutes: 8

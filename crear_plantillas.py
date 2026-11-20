@@ -16,7 +16,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 import lista
-import motor
+import photocraft as motor   # (PhotoCraft: solo para crear la plantilla)
 from lista import HOJA, IZQ, MARGEN, TARJETA_LISTA, TITULOS_Y
 
 BASE = Path(__file__).resolve().parent

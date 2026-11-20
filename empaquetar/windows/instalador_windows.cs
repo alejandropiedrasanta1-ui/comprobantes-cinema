@@ -40,7 +40,7 @@ static class Inst
     public static readonly string LOCAL = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     public static readonly string CARPETA = Path.Combine(Path.Combine(LOCAL, "Programs"), NOMBRE);
     public static readonly string[] PASOS = { "Programa Comprobantes", "Fuentes del diseño", "Accesos directos",
-                                              "PhotoCraft (para crear los comprobantes)" };
+                                              "Comprobación final" };
 
     public static string ExeInstalado { get { return Path.Combine(CARPETA, EXE); } }
     public static string AccesoEscritorio
@@ -72,26 +72,6 @@ static class Inst
         {
             return k == null ? null : k.GetValue("DisplayVersion") as string;
         }
-    }
-
-    public static string BuscarPhotoCraft()
-    {
-        var bases = new List<string>();
-        foreach (string v in new[] { "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432" })
-        {
-            string b = Environment.GetEnvironmentVariable(v);
-            if (!string.IsNullOrEmpty(b)) bases.Add(b);
-        }
-        bases.Add(Path.Combine(LOCAL, "Programs"));
-        foreach (string b in bases)
-        {
-            foreach (string rel in new[] { @"ArtCraft\PhotoCraft\photocraft-cli.exe", @"PhotoCraft\photocraft-cli.exe" })
-            {
-                string r = Path.Combine(b, rel);
-                if (File.Exists(r)) return r;
-            }
-        }
-        return null;
     }
 
     // Cierra Comprobantes si está abierto desde la carpeta instalada (al actualizar)
@@ -263,8 +243,7 @@ class Instalacion
             Accesos();
             Registro();
             E("PASO", "4");
-            if (Inst.BuscarPhotoCraft() != null) E("OK", "PhotoCraft encontrado");
-            else E("AVISO", "Falta PhotoCraft: instálalo para crear los comprobantes");
+            E("OK", File.Exists(Inst.ExeInstalado) ? "Todo listo (no necesita PhotoCraft)" : "Revisa la instalación");
             Thread.Sleep(250);
             E("FIN", VersionApp.V);
             return true;
@@ -731,7 +710,7 @@ class Ventana : Form
         G(3.5, "PASO", "3");
         G(4.0, "OK", "Escritorio y menú Inicio");
         G(4.2, "PASO", "4");
-        G(4.6, "OK", "PhotoCraft encontrado");
+        G(4.6, "OK", "Todo listo (no necesita PhotoCraft)");
         G(5.2, "FIN", VersionApp.V);
     }
 

@@ -1,46 +1,28 @@
 """Pantalla «Ajustes»: menú de secciones a la izquierda y tarjetas agrupadas a la derecha
-(comprobantes, vista previa, PhotoCraft, fuentes, apariencia, datos y copias)."""
-import os
+(comprobantes, vista previa, apariencia, datos y copias)."""
 import shutil
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (CaptionLabel, FluentIcon as FIF, PushButton, Slider, SmoothScrollArea,
                             StrongBodyLabel, SwitchButton, Theme, TitleLabel, setTheme)
 
 import estilo
-import fuentes
 import motor
 import rutas
-from estilo import Icono, Pildora, Separador, Tarjeta
+from estilo import Icono, Separador, Tarjeta
 from ui_comun import CTRL, Monto, abrir, aviso
 
 TEMAS = {"Oscuro": Theme.DARK, "Claro": Theme.LIGHT, "Automático (como el sistema)": Theme.AUTO}
 SECCIONES = [("comprobantes", "Comprobantes", "recibo"), ("vista", "Vista y movimiento", "galeria"),
-             ("photocraft", "PhotoCraft", "camara"), ("fuentes", "Fuentes del diseño", "album"),
              ("apariencia", "Apariencia", "ajustes"), ("datos", "Datos y copias", "carpeta")]
 
 
 def aplicar_tema(nombre):
     setTheme(TEMAS.get(nombre, Theme.DARK))
-
-
-class _EstadoFuentes(QThread):
-    listo = Signal(list)
-
-    def __init__(self, cfg):
-        super().__init__()
-        self.cfg = cfg
-
-    def run(self):
-        try:
-            # fresco: pregunta de nuevo; si cambiaron, la vista en vivo reabre PhotoCraft (si no, no)
-            self.listo.emit(fuentes.faltantes(motor._fuentes_instaladas(self.cfg, fresco=True)))
-        except Exception:
-            self.listo.emit(["(no se pudo revisar)"])
 
 
 class _ItemMenu(QWidget):
@@ -196,7 +178,6 @@ def _fila(icono_nombre, titulo, ayuda="", *controles):
 
 
 class AjustesInterface(QWidget):
-    photocraft_cambiado = Signal()
     reserva_cambiada = Signal()
     vista_cambiada = Signal(bool)
 
@@ -204,7 +185,6 @@ class AjustesInterface(QWidget):
         super().__init__(parent)
         self.setObjectName("ajustes")
         self.cfg = cfg
-        self.hilo = None
         raiz = QHBoxLayout(self)
         raiz.setContentsMargins(24, 24, 0, 0)
         raiz.setSpacing(18)
@@ -294,30 +274,11 @@ class AjustesInterface(QWidget):
         self.animaciones.checkedChanged.connect(self.cambiar_animaciones)
         self._grupo(v, "vista", "Vista previa y movimiento", [
             _fila("galeria", "Vista previa en vivo",
-                  "El comprobante se actualiza mientras escribes (≈0,2 s por cambio con PhotoCraft abierto)",
+                  "El comprobante se actualiza mientras escribes (al instante)",
                   self.vivo),
             _fila("chispa", "Animaciones",
                   "Transiciones suaves, montos que cuentan y la claqueta al generar (apágalas si prefieres todo quieto)",
                   self.animaciones)])
-
-        # PhotoCraft
-        self.e_pc = Pildora("Revisando…")
-        b_pc = PushButton("Buscar…")
-        b_pc.clicked.connect(self.ubicar_photocraft)
-        f_pc = _fila("camara", "PhotoCraft (photocraft-cli)", "", self.e_pc, b_pc)
-        self.l_pc = f_pc.ayuda
-        self._grupo(v, "photocraft", "PhotoCraft", [f_pc])
-
-        # Fuentes
-        self.e_fuentes = Pildora("Revisando…")
-        b_revisar = PushButton(FIF.SYNC, "Revisar")
-        b_revisar.clicked.connect(self.revisar_fuentes)
-        b_instalar = PushButton("Instalar desde carpeta…")
-        b_instalar.clicked.connect(self.instalar_fuentes)
-        f_fuentes = _fila("album", "Lemon Milk, GetVoIP Grotesque y Myriad Pro", "Las letras del comprobante",
-                          self.e_fuentes, b_revisar, b_instalar)
-        self.l_fuentes = f_fuentes.ayuda
-        self._grupo(v, "fuentes", "Fuentes del diseño", [f_fuentes])
 
         # Apariencia
         temas = QWidget()
@@ -355,7 +316,6 @@ class AjustesInterface(QWidget):
 
         self.scroll.verticalScrollBar().valueChanged.connect(self._seguir_scroll)
         self.items["comprobantes"].poner(True)
-        self._estado_photocraft()
 
     # ---------- armado ----------
     def _grupo(self, v, clave, titulo, filas, separar=True):
@@ -400,21 +360,12 @@ class AjustesInterface(QWidget):
 
     def showEvent(self, e):
         super().showEvent(e)
-        self._estado_photocraft()
-        self.revisar_fuentes()
         # el tema marcado es el que se ve (si no hay preferencia guardada, el activo)
         from qfluentwidgets import isDarkTheme
         tema = self.cfg.get("tema") or ("Oscuro" if isDarkTheme() else "Claro")
         self._marcar_tema(tema)
 
     # ---------- acciones ----------
-    def _estado_photocraft(self):
-        ruta = self.cfg.get("photocraft_cli") or ""
-        ok = os.path.isfile(ruta)
-        self.e_pc.poner("Conectado · listo" if ok else "No encontrado", estilo.VERDE if ok else estilo.ROJO)
-        self.l_pc.setText(ruta if ok else "Indica dónde está photocraft-cli para crear los comprobantes")
-        self.l_pc.setVisible(True)
-
     def _abrir_carpeta(self):
         carpeta = Path(self.cfg["carpeta_salida"])
         carpeta.mkdir(parents=True, exist_ok=True)
@@ -438,53 +389,6 @@ class AjustesInterface(QWidget):
         motor.guardar_preferencia("calidad_jpg", self.calidad.value())
         aviso(self, "success", "Calidad del JPG", f"Los próximos comprobantes se guardarán con calidad "
                                                  f"{self.calidad.value()}.")
-
-    def ubicar_photocraft(self):
-        filtro = "photocraft-cli.exe (photocraft-cli.exe)" if rutas.ES_WINDOWS else "Todos (*)"
-        ruta, _ = QFileDialog.getOpenFileName(self, "Ubica PhotoCraft (photocraft-cli)", "", filtro)
-        if ruta.endswith(".app"):  # en Mac se puede elegir directamente la app
-            dentro = sorted(Path(ruta).glob("Contents/*/photocraft-cli"))
-            ruta = str(dentro[0]) if dentro else ""
-        if not ruta or not os.path.isfile(ruta):
-            return
-        self.cfg["photocraft_cli"] = ruta
-        motor.guardar_preferencia("photocraft_cli", ruta)
-        self._estado_photocraft()
-        aviso(self, "success", "PhotoCraft", "Listo, se usará esta ubicación.")
-        self.photocraft_cambiado.emit()
-        self.revisar_fuentes()
-
-    def revisar_fuentes(self):
-        if not os.path.isfile(self.cfg.get("photocraft_cli") or ""):
-            self.e_fuentes.poner("Sin PhotoCraft", estilo.AMBAR)
-            self.l_fuentes.setText("Primero indica dónde está PhotoCraft")
-            return
-        if self.hilo and self.hilo.isRunning():
-            return
-        self.e_fuentes.poner("Revisando…", None)
-        self.hilo = _EstadoFuentes(self.cfg)
-        self.hilo.listo.connect(self._mostrar_fuentes)
-        self.hilo.start()
-
-    def _mostrar_fuentes(self, faltan):
-        if faltan:
-            self.e_fuentes.poner(f"Faltan {len(faltan)}", estilo.AMBAR)
-            self.l_fuentes.setText("Faltan: " + ", ".join(faltan) + " — elige la carpeta donde están")
-        else:
-            self.e_fuentes.poner("3 de 3 instaladas", estilo.VERDE)
-            self.l_fuentes.setText("Lemon Milk, GetVoIP Grotesque y Myriad Pro están instaladas")
-
-    def instalar_fuentes(self):
-        carpeta = QFileDialog.getExistingDirectory(self, "Carpeta con las fuentes (Lemon Milk, GetVoIP, Myriad Pro)")
-        if not carpeta:
-            return
-        hechos = fuentes.instalar_desde(carpeta)
-        if hechos:
-            aviso(self, "success", "Fuentes instaladas", ", ".join(hechos), 6000)
-        else:
-            aviso(self, "warning", "No encontré las fuentes",
-                  "En esa carpeta no están LEMONMILK-Bold.otf, GetVoIP Grotesque.otf ni MYRIADPRO-*.OTF.", 8000)
-        self.revisar_fuentes()
 
     def cambiar_abrir_carpeta(self, si):
         self.cfg["abrir_carpeta"] = si

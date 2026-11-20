@@ -21,7 +21,6 @@ from qfluentwidgets.components.date_time.fast_calendar_view import FastCalendarV
 from qfluentwidgets.components.widgets.line_edit import LineEditButton
 
 import estilo
-import fuentes
 import motor
 from estilo import Cifra, Icono, Pildora, Tarjeta
 
@@ -134,7 +133,7 @@ def aviso(padre, tipo, titulo, texto, duracion=4000, ruta_abrir=None):
 
 
 class Trabajo(QThread):
-    """Genera el comprobante (o la vista previa) con PhotoCraft sin congelar la ventana."""
+    """Dibuja el comprobante (o la vista previa) sin congelar la ventana."""
     listo = Signal(str)
     fallo = Signal(str)
 
@@ -142,51 +141,19 @@ class Trabajo(QThread):
         super().__init__()
         self.datos, self.cfg, self.destino, self.calidad, self.vista = datos, cfg, destino, calidad, vista
         self.lado = lado
-        self.imagen = None   # vista en vivo: la imagen ya leída (aquí y no en la ventana, que no se traba)
+        self.imagen = None   # vista en vivo: la imagen ya dibujada (aquí y no en la ventana, que no se traba)
 
     def run(self):
         try:
-            if self.vista:  # vista en vivo: PhotoCraft queda abierto entre un cambio y otro
-                ruta = motor.generar_vista(self.datos, self.cfg, self.destino, self.calidad or 80, self.lado)
-                img = QImage(str(ruta))
-                if not img.isNull():   # el comprobante es opaco: RGB32 se dibuja sin mezclar
-                    self.imagen = img.convertToFormat(QImage.Format_RGB32)
+            if self.vista:  # vista en vivo: en memoria, del tamaño de la pantalla
+                self.imagen = motor.generar_vista(self.datos, self.cfg, self.lado)
+                ruta = Path(self.destino).with_suffix(".jpg")   # se escribe solo si se abre afuera (ver ui_nuevo)
             else:
                 ruta = motor.generar(self.datos, self.cfg, self.destino, self.calidad)
             self.listo.emit(str(ruta))
         except Exception as e:  # se muestra al usuario
             traceback.print_exc()
             self.fallo.emit(str(e))
-
-
-class Revision(QThread):
-    """Al abrir: comprueba que PhotoCraft tenga las fuentes del diseño e instala las que falten."""
-    listo = Signal(str)
-
-    def __init__(self, cfg):
-        super().__init__()
-        self.cfg = cfg
-
-    def run(self):
-        try:
-            faltan_f = fuentes.faltantes(motor.fuentes_al_abrir(self.cfg))
-            if not faltan_f:
-                return
-            hechos = fuentes.instalar(faltan_f)
-            motor.olvidar_fuentes()
-            siguen = fuentes.faltantes(motor._fuentes_instaladas(self.cfg, fresco=True))
-            for _ in range(3 if hechos and siguen else 0):   # macOS tarda unos segundos en registrarlas
-                self.msleep(2000)
-                siguen = fuentes.faltantes(motor._fuentes_instaladas(self.cfg, fresco=True))
-                if not siguen:
-                    break
-            if siguen:
-                self.listo.emit("Faltan las fuentes del diseño (" + ", ".join(siguen) + "). "
-                                "Ve a Ajustes › Fuentes del diseño y elige la carpeta donde están.")
-            elif hechos:
-                self.listo.emit("Se instalaron las fuentes del diseño: " + ", ".join(faltan_f) + ".")
-        except Exception as e:  # informativo; el programa sigue funcionando
-            self.listo.emit(f"No se pudieron revisar las fuentes: {e}")
 
 
 class Monto(SpinBox):

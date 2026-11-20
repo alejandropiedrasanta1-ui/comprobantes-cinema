@@ -3,7 +3,7 @@
   python generador.py                       abre el programa
   python generador.py --autoprueba INFORME  genera un comprobante de cada paquete sin ventana
                                             (sirve para verificar una instalación)
-  python generador.py --prueba-vivo CARPETA [--cli PHOTOCRAFT]
+  python generador.py --prueba-vivo CARPETA
                                             prueba la vista en vivo escribiendo como un usuario
                                             y mide cuánto tarda cada cambio en verse
 """
@@ -34,7 +34,7 @@ def _autoprueba(reporte):
 
 
 def _verificar():
-    """Arma la ventana completa sin mostrarla (sirve en una Mac sin PhotoCraft, p. ej. GitHub Actions)."""
+    """Arma la ventana completa sin mostrarla (sirve en la Mac de GitHub Actions)."""
     import os
     if sys.platform != "darwin":
         # En Mac no: la ventana sin bordes usa la vista nativa de Cocoa y se cae en modo offscreen
@@ -81,7 +81,7 @@ def _capturas(carpeta):
     for t in trad:
         qa.installTranslator(t)
     cfg = motor.cargar_config()
-    cfg["vista_en_vivo"] = False   # en la Mac de prueba no hay PhotoCraft: se ve la plantilla
+    cfg["vista_en_vivo"] = True
 
     def esperar(ms):
         lazo = QEventLoop()
@@ -133,12 +133,11 @@ def _capturas(carpeta):
     return 0
 
 
-def _prueba_vivo(carpeta, cli=None):
+def _prueba_vivo(carpeta, cli=None):   # (cli: ya no se usa)
     """Prueba la vista en vivo como un usuario: escribe letra por letra, pone la captura, cambia de
     paquete, usa el zoom y agranda la ventana. Mide cuánto tarda en verse cada cambio, guarda
-    capturas de pantalla y un informe (vista_en_vivo.txt). cli: otro photocraft-cli (p. ej. el
-    simulado de herramientas/ en la Mac de GitHub, que no tiene PhotoCraft). Devuelve 0 si todo
-    se vio a tiempo y sin errores."""
+    capturas de pantalla y un informe (vista_en_vivo.txt). Devuelve 0 si todo se vio a tiempo y sin
+    errores."""
     import statistics
     import tempfile
     import time
@@ -153,8 +152,6 @@ def _prueba_vivo(carpeta, cli=None):
     app.configurar_letra()
     cfg = motor.cargar_config()
     cfg["vista_en_vivo"] = True
-    if cli:
-        cfg["photocraft_cli"] = str(Path(cli).resolve())
     v = app.Ventana(cfg, revisar=False)
     if hasattr(v, "setMicaEffectEnabled"):
         v.setMicaEffectEnabled(False)
@@ -248,7 +245,7 @@ def _prueba_vivo(carpeta, cli=None):
         else:
             anotar(f"{nombre}: visible en {1000 * (visto - inicio):.0f} ms")
 
-    anotar(f"Vista en vivo · {sys.platform} · PhotoCraft: {cfg.get('photocraft_cli')}")
+    anotar(f"Vista en vivo · {sys.platform} · dibujo propio (sin PhotoCraft)")
     visto = hasta_ver(lambda vi: True, 120)
     anotar(f"Primera vista al abrir: {visto:.1f} s" if visto else "Primera vista al abrir: NO SE VIO")
     if not visto:
@@ -281,17 +278,16 @@ def _prueba_vivo(carpeta, cli=None):
         paso("Agrandar la ventana (vista más nítida)", lambda: None, lambda vi: True)
     esperar(500)
     foto("5_ventana_grande")
-    if n.vista_ruta:
+    if n.vista_ruta:   # la vista vive en memoria: se guarda como al abrirla afuera
         import shutil
-        shutil.copy(n.vista_ruta, carpeta / f"vivo_ultima_vista{Path(n.vista_ruta).suffix}")
-    anotar(f"Fallos de la vía rápida: {motor._fallos_sesion} · errores: {len(errores)}")
-    anotar("RESULTADO: " + ("OK" if not errores and motor._fallos_sesion == 0 else "FALLÓ · " + " · ".join(errores)))
+        shutil.copy(n._archivo_actual(), carpeta / "vivo_ultima_vista.jpg")
+    anotar(f"Errores: {len(errores)}")
+    anotar("RESULTADO: " + ("OK" if not errores else "FALLÓ · " + " · ".join(errores)))
     (carpeta / "vista_en_vivo.txt").write_text("\n".join(lineas), encoding="utf-8")
     while n.vista_trabajo and n.vista_trabajo.isRunning():
         esperar(50)
     v.close()
-    motor._sesion.cerrar()
-    return 0 if not errores and motor._fallos_sesion == 0 else 1
+    return 0 if not errores else 1
 
 
 if __name__ == "__main__":
