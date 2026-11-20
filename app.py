@@ -90,9 +90,9 @@ class Ventana(MSFluentWindow):
         self.ajustar_a_pantalla()
         if revisar:   # PhotoCraft de la vista en vivo se abre cuando termina la revisión de fuentes
             self.nuevo.revisando = True   # desde ya: la primera vista (al abrir) espera a la revisión
-            QTimer.singleShot(600, self.revisar_entorno)
+            QTimer.singleShot(150, self.revisar_entorno)   # tras pintar la ventana; la revisión va en otro hilo
         else:
-            QTimer.singleShot(600, self.nuevo._calentar_vista)
+            QTimer.singleShot(150, self.nuevo._calentar_vista)
 
     def ajustar_a_pantalla(self):
         """Tamaño según la pantalla (sin la barra de menú ni el Dock / la barra de tareas): cabe completa en una

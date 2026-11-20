@@ -292,6 +292,19 @@ def _fuentes_instaladas(cfg, sesion=None, fresco=False):
     return _cache_fuentes
 
 
+def fuentes_al_abrir(cfg):
+    """Revisión de fuentes al abrir: con la vista en vivo encendida se le pregunta al PhotoCraft que la
+    vista va a usar de todos modos (queda abierto y listo), en vez de abrir otro solo para esto (~0,5 s)."""
+    if cfg.get("vista_en_vivo", True) and _fallos_sesion < 2:
+        try:
+            with _sesion.candado:
+                _sesion.preparar(cfg)
+                return _sesion.fuentes_instaladas()
+        except Exception:
+            _sesion.cerrar()
+    return _fuentes_instaladas(cfg)
+
+
 def _estilos_sustitutos(cfg, capas, ids, sesion=None):
     """Para cada capa editada cuya fuente no está instalada (p. ej. Myriad Pro), devuelve el
     estilo de la fuente sustituta calibrada para que mida y se vea igual que el original."""

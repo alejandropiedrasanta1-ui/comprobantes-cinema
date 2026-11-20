@@ -269,6 +269,35 @@ class _Lienzo(QWidget):
         self._entrada = v
         self.update()
 
+    def _sombra(self):
+        """La sombra (8 capas redondeadas, cara de pintar en Retina) se dibuja una vez por tamaño y tema,
+        no en cada vista ni en cada cuadro del fundido o del zoom."""
+        dpr = self.devicePixelRatioF()
+        clave = (self.width(), self.height(), dpr, isDarkTheme())
+        if getattr(self, "_sombra_clave", None) != clave:
+            pm = QPixmap(round(self.width() * dpr), round(self.height() * dpr))
+            pm.setDevicePixelRatio(dpr)
+            pm.fill(Qt.transparent)
+            q = QPainter(pm)
+            q.setRenderHint(QPainter.Antialiasing)
+            self._pintar_sombra(q)
+            q.end()
+            self._sombra_pm, self._sombra_clave = pm, clave
+        return self._sombra_pm
+
+    def _pintar_sombra(self, q):
+        q.setPen(Qt.NoPen)
+        m = MARGEN_LIENZO
+        r = QRectF(m, m, self.width() - 2 * m, self.height() - 2 * m)
+        oscuro = isDarkTheme()
+        for i in range(8):                       # capas cada vez más anchas y tenues
+            a = 22 - i * 2.6 if oscuro else 12 - i * 1.4
+            if a <= 0:
+                break
+            q.setBrush(QColor(0, 0, 0, int(a)))
+            g = 2 + i * 2.2
+            q.drawRoundedRect(r.adjusted(-g, -g + 6, g, g + 6), 6 + g, 6 + g)
+
     def paintEvent(self, e):
         if not self.pm and not (self.escalando and self.fuente is not None):
             return
@@ -279,14 +308,10 @@ class _Lienzo(QWidget):
         if self._entrada < 1:
             p.setOpacity(self._entrada)
             p.translate(0, 14 * (1 - self._entrada))
-        p.setPen(Qt.NoPen)
-        for i in range(8):                       # sombra: capas cada vez más anchas y tenues
-            a = 22 - i * 2.6 if isDarkTheme() else 12 - i * 1.4
-            if a <= 0:
-                break
-            p.setBrush(QColor(0, 0, 0, int(a)))
-            g = 2 + i * 2.2
-            p.drawRoundedRect(r.adjusted(-g, -g + 6, g, g + 6), 6 + g, 6 + g)
+        if self.escalando:   # zoom animándose: el tamaño cambia en cada cuadro, no vale guardarla
+            self._pintar_sombra(p)
+        else:
+            p.drawPixmap(0, 0, self._sombra())
         if self.escalando and self.fuente is not None and not self.fuente.isNull():
             p.setRenderHint(QPainter.SmoothPixmapTransform)   # zoom animándose: la original, al vuelo
             p.drawPixmap(r, self.fuente, QRectF(self.fuente.rect()))

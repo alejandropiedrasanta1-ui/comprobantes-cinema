@@ -186,9 +186,9 @@ def _fila(icono_nombre, titulo, ayuda="", *controles):
     v.addWidget(t)
     ayuda_l = CaptionLabel(ayuda)
     ayuda_l.setWordWrap(True)
-    ayuda_l.setVisible(bool(ayuda))
     v.addWidget(ayuda_l)
-    h.addLayout(v, 1)
+    h.addLayout(v, 1)   # primero dentro de la fila: si se muestra sin padre, aparece como ventanita suelta
+    ayuda_l.setHidden(not ayuda)
     for c in controles:
         h.addWidget(c, 0, Qt.AlignVCenter)
     w.ayuda = ayuda_l

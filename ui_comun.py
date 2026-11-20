@@ -169,7 +169,7 @@ class Revision(QThread):
 
     def run(self):
         try:
-            faltan_f = fuentes.faltantes(motor._fuentes_instaladas(self.cfg))
+            faltan_f = fuentes.faltantes(motor.fuentes_al_abrir(self.cfg))
             if not faltan_f:
                 return
             hechos = fuentes.instalar(faltan_f)
@@ -577,8 +577,11 @@ class Rejilla(QWidget):
         self.g.setVerticalSpacing(espacio)
         # la rejilla puede quedar más angosta que sus columnas actuales: así se entera de que debe reacomodarse
         self.g.setSizeConstraint(QLayout.SetNoConstraint)
-        for w in widgets:
-            self.agregar(w)
+        for w in widgets:   # todas juntas y se acomodan una sola vez (no una vez por cada tarjeta)
+            self.widgets.append(w)
+            w.setParent(self)
+        if self.widgets:
+            self._acomodar(forzar=True)
 
     def agregar(self, w):
         self.widgets.append(w)
@@ -613,7 +616,7 @@ class Rejilla(QWidget):
         return QSize(min(ancho, self.ancho_min), self.g.minimumSize().height())
 
     def sizeHint(self):
-        return QSize(self.g.sizeHint().width(), self.g.sizeHint().height())
+        return self.g.sizeHint()   # una sola consulta: medir la rejilla es lo más caro al abrir
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
