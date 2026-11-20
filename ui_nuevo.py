@@ -30,7 +30,7 @@ from ui_comun import (CTRL, NOMBRES_PAQUETE, Bloque, CampoFecha, Monto, Pasos, R
 ANCHO_COMPACTO = 900     # por debajo: se ve el formulario o la vista previa (botón para cambiar), no los dos
 ANCHO_BARRA_CORTA = 780  # por debajo: la barra inferior se simplifica
 MARGEN_LIENZO = 22       # espacio alrededor del comprobante para su sombra
-LADO_MAX = 3508          # alto real del comprobante: la vista en vivo nunca se dibuja más grande
+LADO_MAX = 5262          # 1,5 × la hoja: con zoom (y en Retina) la vista se dibuja más grande y no se pixelea
 ZOOM_MIN, ZOOM_MAX = 1.0, 4.0   # zoom de la vista previa: 1 = ajustada al panel
 
 

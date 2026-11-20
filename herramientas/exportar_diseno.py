@@ -2,7 +2,7 @@
 
 Solo hace falta (y solo funciona) en una computadora con PhotoCraft, y solo cuando cambia el PSD
 (después de crear_plantillas.py). Deja en PLANTILLAS/DISENO/:
-  fondo.jpg        la hoja con todo lo fijo (sin los textos, íconos ni rayas que cambian)
+  fondo.jpg        (al doble de resolución) la hoja con todo lo fijo (sin los textos, íconos ni rayas que cambian)
   <capa>.png       cada ícono, el reloj de arena con su raya y los íconos de Boda y XV (con transparencia,
                    recortados a su caja)
   diseno.json      posición, letra, tamaño y escala de cada texto que cambia, y la caja de cada ícono
@@ -20,6 +20,10 @@ import lista   # noqa: E402
 import photocraft as motor   # noqa: E402  (PhotoCraft: solo aquí, en desarrollo)
 
 DESTINO = AQUI / "PLANTILLAS" / "DISENO"
+# El fondo y las piezas se exportan al doble de resolución (PhotoCraft rehace formas, textos fijos y fotos
+# desde su origen): así el comprobante se puede guardar más grande y no se pixelea al hacer zoom.
+# Las medidas (diseno.json) siguen en px de la hoja de 2480×3508.
+ESCALA = 2
 
 
 def _hojas(capas):
@@ -67,6 +71,10 @@ def exportar():
 
     visibles = {l["id"]: bool(l.get("visible")) for l in capas}
 
+    # todo lo que sigue, al doble de resolución
+    s._ejecutar("image.imageSize", {"percent": ESCALA * 100, "resample": "bicubicSmoother"})
+    disenio["escala_imagenes"] = ESCALA
+
     def guardar(ruta):
         s._pedir("doc.save", {"path": str(Path(ruta).resolve()), "quality": 100, "metadata": "none"})
 
@@ -75,7 +83,7 @@ def exportar():
     png = tmp / "cinema_fondo.png"
     guardar(png)
     with Image.open(png) as im:
-        im.convert("RGB").save(DESTINO / "fondo.jpg", quality=95, subsampling=0)
+        im.convert("RGB").save(DESTINO / "fondo.jpg", quality=94, subsampling=0, optimize=True)
     png.unlink(missing_ok=True)
 
     # 2) Cada pieza sola, con transparencia
@@ -90,7 +98,7 @@ def exportar():
             caja = im.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()   # sin el punto casi invisible
             if caja:
                 im.crop(caja).save(DESTINO / f"{nombre}.png", optimize=True)
-                disenio["piezas"][nombre] = list(caja)
+                disenio["piezas"][nombre] = [round(v / ESCALA, 2) for v in caja]   # en px de la hoja
         png.unlink(missing_ok=True)
     s.cerrar()
     (DESTINO / "diseno.json").write_text(json.dumps(disenio, ensure_ascii=False, indent=1), encoding="utf-8")

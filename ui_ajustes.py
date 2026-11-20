@@ -240,8 +240,8 @@ class AjustesInterface(QWidget):
         self.reserva.setFixedWidth(170)
         self.reserva.editingFinished.connect(self.guardar_reserva)
         self.calidad = Slider(Qt.Horizontal)
-        self.calidad.setRange(60, 100)
-        self.calidad.setValue(int(cfg.get("calidad_jpg", 92)))
+        self.calidad.setRange(60, motor.CALIDAD_MAX)
+        self.calidad.setValue(min(int(cfg.get("calidad_jpg", motor.CALIDAD_POR_DEFECTO)), motor.CALIDAD_MAX))
         self.calidad.setFixedWidth(170)
         self.l_calidad = StrongBodyLabel(str(self.calidad.value()))
         self.l_calidad.setFixedWidth(30)
@@ -257,7 +257,7 @@ class AjustesInterface(QWidget):
             _fila("carpeta", "Abrir la carpeta al terminar",
                   "Al generar un comprobante se abre su carpeta con el archivo marcado", self.abrir_carpeta),
             _fila("recibo", "Reserva por defecto", "Monto que se sugiere al crear un comprobante", self.reserva),
-            _fila("galeria", "Calidad del JPG", "Más alto = más nítido y más pesado (92 recomendado)",
+            _fila("galeria", "Calidad del JPG", "Más alto = más nítido y más pesado (85 recomendado: el comprobante ya sale al doble de resolución)",
                   self.calidad, self.l_calidad)])
 
         # Vista previa

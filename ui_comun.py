@@ -105,9 +105,15 @@ def abrir_carpeta_si_toca(cfg, ruta, espera_ms=900):
 
 
 def copiar_imagen(ruta):
-    """Copia el comprobante: como imagen (WhatsApp Web/Escritorio) y como archivo."""
+    """Copia el comprobante: como imagen (WhatsApp Web/Escritorio) y como archivo. La imagen va a la mitad
+    (2480×3508, igual de nítida en un chat, que la reduce de todas formas): la de tamaño completo
+    (4960×7016) congelaba la ventana casi un segundo. El archivo copiado es el completo."""
+    lector = QImageReader(str(ruta))
+    tam = lector.size()
+    if tam.isValid() and tam.height() > 3600:
+        lector.setScaledSize(tam / 2)   # el JPG se decodifica directo a la mitad (rápido)
     datos = QMimeData()
-    datos.setImageData(QImage(str(ruta)))
+    datos.setImageData(lector.read())
     datos.setUrls([QUrl.fromLocalFile(str(ruta))])
     QApplication.clipboard().setMimeData(datos)
 

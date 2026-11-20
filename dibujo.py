@@ -21,6 +21,10 @@ import rutas
 PX_POR_PT = 4.1666667
 REF_PX = 200                   # tamaño de referencia de la letra: se escala con el pintor (tamaños exactos)
 INCLINACION = 0.21             # cursiva simulada del detalle de la lista (como «Faux Italic»)
+# El comprobante se guarda más grande que la hoja de diseño (2480×3508): textos, íconos y fondo (exportado
+# al doble) quedan nítidos al hacer zoom. ESCALA_MAX: lo más grande que se dibuja (el fondo viene a 2×).
+ESCALA_SALIDA = 2.0
+ESCALA_MAX = 2.0
 RADIO_CAPTURA = 30             # esquinas del marco de la captura (forma de pantalla de celular)
 ARCHIVOS_FUENTE = {            # nombre PostScript (como lo guarda el PSD) → archivo en recursos/fuentes
     "LEMONMILK-Bold": "LEMONMILK-Bold.otf",
@@ -86,6 +90,8 @@ def fuente(ps):
     f.setWeight(peso)
     f.setPixelSize(REF_PX)
     f.setHintingPreference(QFont.PreferNoHinting)
+    # sin suavizado de pantalla LCD (en Windows dejaba bordes azules y naranjas en las letras del JPG)
+    f.setStyleStrategy(QFont.StyleStrategy(QFont.PreferAntialias | QFont.NoSubpixelAntialias))
     f.setKerning(True)
     return f
 
@@ -285,8 +291,8 @@ def _pintar_lista(p, L):
 
 # ================= El comprobante =================
 def _pieza(p, nombre):
-    x0, y0, _, _ = _diseno["piezas"][nombre]
-    p.drawImage(QPointF(x0, y0), _piezas[nombre])
+    x0, y0, x1, y1 = _diseno["piezas"][nombre]   # (la imagen viene al doble de resolución)
+    p.drawImage(QRectF(x0, y0, x1 - x0, y1 - y0), _piezas[nombre])
 
 
 def _fondo(ancho_px):
@@ -301,14 +307,14 @@ def _fondo(ancho_px):
         return _fondos[ancho_px]
 
 
-def dibujar(textos, items, captura=None, evento="BODA", completo=False, lado=None):
+def dibujar(textos, items, captura=None, evento="BODA", completo=False, lado=None, escala=None):
     """textos: {clave: texto} (fecha, tema, nombre_lugar, contacto, reserva, reserva_monto, saldo,
     saldo_monto). items: la lista de servicios. captura: QImage ya preparada (o None: queda el recuadro de
-    ejemplo). lado: alto en px de la imagen (vista en vivo); sin él, del tamaño real de la hoja.
-    Devuelve un QImage."""
+    ejemplo). lado: alto en px de la imagen (vista en vivo); sin él, escala × la hoja de 2480×3508
+    (ESCALA_SALIDA si no se indica). Devuelve un QImage."""
     d = diseno()
     W, H = d["hoja"]
-    k = min(1.0, lado / H) if lado else 1.0
+    k = min(ESCALA_MAX, lado / H) if lado else (escala or ESCALA_SALIDA)
     w, h = round(W * k), round(H * k)
     img = QImage(w, h, QImage.Format_RGB32)
     p = QPainter(img)
