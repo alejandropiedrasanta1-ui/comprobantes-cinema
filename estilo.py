@@ -299,6 +299,8 @@ class Pildora(QWidget):
 
     def poner(self, texto=None, color=None):
         """Cambia el texto y el color (None = gris neutro)."""
+        if color == self.color and (texto is None or texto == self.texto):
+            return   # igual que antes: sin medir ni repintar (se llama en cada tecla)
         cambia_color = color != self.color
         if cambia_color:
             self._color_previo = self._color_actual(self.color)

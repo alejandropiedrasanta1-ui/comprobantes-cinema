@@ -1080,6 +1080,12 @@ class Bloque(Tarjeta):
         self.resaltar(si and not self.completo)
 
     def poner_estado(self, completo, resumen, falta=None):
+        # Se llama en cada tecla: si nada cambió no se toca nada. Antes cada tecla repintaba las tres
+        # secciones enteras (con las tarjetas de paquete adentro) y escribir daba pequeños tirones.
+        if getattr(self, "_ultimo_estado", None) == (completo, resumen, falta):
+            return
+        cambia_completo = getattr(self, "_ultimo_estado", (None,))[0] != completo
+        self._ultimo_estado = (completo, resumen, falta)
         self.completo = completo
         self.resumen.setText(resumen)
         self.setToolTip(resumen)
@@ -1089,4 +1095,5 @@ class Bloque(Tarjeta):
         else:
             verbo = "Faltan " if falta and falta[0].isdigit() else "Falta "
             self.estado.poner((verbo + falta) if falta else "Pendiente", estilo.AMBAR if falta else None)
-        self.update()
+        if cambia_completo:   # (la tarjeta se pinta distinto completa o no)
+            self.update()

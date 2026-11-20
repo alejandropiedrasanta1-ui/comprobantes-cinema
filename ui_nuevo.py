@@ -830,13 +830,24 @@ class NuevoInterface(QWidget):
         panel = self.panel_vista = _PanelVista()
         p = QVBoxLayout(panel)
         i, a, d, b = _PanelVista.MARGEN     # dentro de la tarjeta, con su propio aire
-        p.setContentsMargins(i + 18, a + 12, d + 14, b + 6)
-        p.setSpacing(6)
-        cabv = QHBoxLayout()
+        p.setContentsMargins(i + 10, a + 4, d + 6, b + 4)
+        p.setSpacing(4)
+        # Sin barra arriba: el comprobante usa todo el panel (zoom con la rueda, arrastrar para moverse,
+        # doble clic para ajustar). En ventanas angostas queda solo «← Datos» para volver al formulario.
+        self.cab_vista = QWidget()
+        cabv = QHBoxLayout(self.cab_vista)
+        cabv.setContentsMargins(0, 0, 0, 0)
         cabv.setSpacing(10)
         self.b_volver = TransparentPushButton(FIF.LEFT_ARROW, "Datos")     # solo en ventanas angostas
         self.b_volver.clicked.connect(lambda: self._ver_vista(False))
         cabv.addWidget(self.b_volver)
+        cabv.addStretch(1)
+        self.cab_vista.hide()
+        # Lo que antes iba en la barra sigue existiendo (el código lo actualiza) pero dentro de un contenedor
+        # oculto: nunca se ve ni sale como ventanita suelta.
+        self._ocultos = QWidget(panel)
+        self._ocultos.hide()
+        cabv = QHBoxLayout(self._ocultos)
         self.titulo_vista = StrongBodyLabel("Vista previa")   # (si está en vivo lo dice la píldora)
         f = self.titulo_vista.font()
         f.setPixelSize(15)
@@ -880,10 +891,10 @@ class NuevoInterface(QWidget):
         cabv.addWidget(self.l_zoom)
         cabv.addSpacing(4)
         cabv.addWidget(self.b_ext)
-        p.addLayout(cabv)
+        p.addWidget(self.cab_vista)
         self.estado = CaptionLabel("")
         self.estado.setWordWrap(True)
-        p.addWidget(self.estado)
+        cabv.addWidget(self.estado)
         self.area = SmoothScrollArea()
         self.area.setStyleSheet("QScrollArea{background:transparent;border:none}")
         self.area.viewport().setStyleSheet("background:transparent")
@@ -1394,8 +1405,8 @@ class NuevoInterface(QWidget):
         menos de lo que pide su cabecera (título, «En vivo» y zoom)."""
         alto = self.height() - self.barra.sizeHint().height()
         i, a, d, b = _PanelVista.MARGEN
-        vertical = (a + 12) + 40 + 6 + 20 + 6 + 2 * MARGEN_LIENZO + (b + 6)    # márgenes, cabecera y estado
-        horizontal = (i + 18) + (d + 14) + 2 * MARGEN_LIENZO + 12
+        vertical = (a + 4) + 2 * MARGEN_LIENZO + (b + 4)    # márgenes (sin barra: todo para el comprobante)
+        horizontal = (i + 10) + (d + 6) + 2 * MARGEN_LIENZO + 12
         minimo = self.panel_vista.layout().minimumSize().width() + 8   # lo que pide la cabecera con esta letra
         return int(max(minimo, (alto - vertical) / (3508 / 2480) + horizontal))
 
@@ -1406,6 +1417,7 @@ class NuevoInterface(QWidget):
             self.compacto = compacto
             self.b_ver_vista.setVisible(compacto)
             self.b_volver.setVisible(compacto)
+            self.cab_vista.setVisible(compacto)
             self.v_form.setContentsMargins(*((16, 12, 14, 12) if compacto else (26, 16, 20, 14)))
         self.scroll_form.setVisible(not compacto or not self.viendo_vista)
         self.panel_vista.setVisible(not compacto or self.viendo_vista)
