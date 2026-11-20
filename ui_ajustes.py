@@ -17,7 +17,7 @@ from estilo import Icono, Separador, Tarjeta
 from ui_comun import CTRL, Monto, abrir, aviso
 
 TEMAS = {"Oscuro": Theme.DARK, "Claro": Theme.LIGHT, "Automático (como el sistema)": Theme.AUTO}
-SECCIONES = [("comprobantes", "Comprobantes", "recibo"), ("vista", "Vista y movimiento", "galeria"),
+SECCIONES = [("comprobantes", "Comprobantes", "recibo"), ("vista", "Movimiento", "chispa"),
              ("apariencia", "Apariencia", "ajustes"), ("datos", "Datos y copias", "carpeta")]
 
 
@@ -179,7 +179,6 @@ def _fila(icono_nombre, titulo, ayuda="", *controles):
 
 class AjustesInterface(QWidget):
     reserva_cambiada = Signal()
-    vista_cambiada = Signal(bool)
 
     def __init__(self, cfg, parent=None):
         super().__init__(parent)
@@ -262,20 +261,12 @@ class AjustesInterface(QWidget):
                   self.calidad, self.l_calidad)])
 
         # Vista previa
-        self.vivo = SwitchButton()
-        self.vivo.setOnText("")          # sin «Sí/No»: tienen anchos distintos y desalineaban los interruptores
-        self.vivo.setOffText("")
-        self.vivo.setChecked(bool(cfg.get("vista_en_vivo", True)))
-        self.vivo.checkedChanged.connect(lambda si: self.vista_cambiada.emit(si))
         self.animaciones = SwitchButton()
-        self.animaciones.setOnText("")
+        self.animaciones.setOnText("")          # sin «Sí/No»: tienen anchos distintos y desalineaban
         self.animaciones.setOffText("")
         self.animaciones.setChecked(bool(cfg.get("animaciones", True)))
         self.animaciones.checkedChanged.connect(self.cambiar_animaciones)
-        self._grupo(v, "vista", "Vista previa y movimiento", [
-            _fila("galeria", "Vista previa en vivo",
-                  "El comprobante se actualiza mientras escribes (al instante)",
-                  self.vivo),
+        self._grupo(v, "vista", "Movimiento", [   # (la vista previa en vivo está siempre encendida)
             _fila("chispa", "Animaciones",
                   "Transiciones suaves, montos que cuentan y la claqueta al generar (apágalas si prefieres todo quieto)",
                   self.animaciones)])

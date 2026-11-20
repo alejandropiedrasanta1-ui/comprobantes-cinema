@@ -76,9 +76,6 @@ class Ventana(MSFluentWindow):
         self.nuevo.registrado.connect(self.historial.refrescar)
         self.historial.pedir_nuevo.connect(lambda: self.switchTo(self.nuevo))
         self.paquetes.precios_cambiados.connect(self.nuevo.actualizar_precios)
-        self.ajustes.vista_cambiada.connect(self.nuevo.poner_en_vivo)
-        self.nuevo.en_vivo.checkedChanged.connect(
-            lambda si: self.ajustes.vivo.isChecked() != si and self.ajustes.vivo.setChecked(si))
         QShortcut(QKeySequence.Paste, self, activated=self._pegar)
         QShortcut(QKeySequence("Ctrl+N"), self, activated=self._nuevo)
         QShortcut(QKeySequence("Ctrl+F"), self, activated=self._buscar)
@@ -86,7 +83,7 @@ class Ventana(MSFluentWindow):
             QShortcut(QKeySequence(tecla), self, activated=self._generar)
 
         self.ajustar_a_pantalla()
-        QTimer.singleShot(0, self.nuevo._render_vista)   # la primera vista, apenas se ve la ventana
+        QTimer.singleShot(0, lambda: self.nuevo._render_vista())   # la primera vista, apenas se ve la ventana
 
     def ajustar_a_pantalla(self):
         """Tamaño según la pantalla (sin la barra de menú ni el Dock / la barra de tareas): cabe completa en una

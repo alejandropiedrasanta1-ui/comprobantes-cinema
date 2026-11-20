@@ -81,7 +81,6 @@ def _capturas(carpeta):
     for t in trad:
         qa.installTranslator(t)
     cfg = motor.cargar_config()
-    cfg["vista_en_vivo"] = True
 
     def esperar(ms):
         lazo = QEventLoop()
@@ -151,7 +150,6 @@ def _prueba_vivo(carpeta, cli=None):   # (cli: ya no se usa)
     qa = QApplication(sys.argv)
     app.configurar_letra()
     cfg = motor.cargar_config()
-    cfg["vista_en_vivo"] = True
     v = app.Ventana(cfg, revisar=False)
     if hasattr(v, "setMicaEffectEnabled"):
         v.setMicaEffectEnabled(False)
@@ -183,12 +181,15 @@ def _prueba_vivo(carpeta, cli=None):   # (cli: ya no se usa)
             pedidas.append((reloj(), n.festejado.text(), n.lugar.text(), n.paquete, n.zona.ruta, n.zoom))
 
     def lista(ruta):
-        inicio, *datos = pedidas.pop(0)
+        # (en Mac la primera vista puede salir antes de empezar a medir: cuenta desde el inicio)
+        inicio, *datos = pedidas.pop(0) if pedidas else (0.0, n.festejado.text(), n.lugar.text(), n.paquete,
+                                                         n.zona.ruta, n.zoom)
         vistas.append((reloj(), reloj() - inicio, *datos))
         orig_lista(ruta)
 
     def fallo(msg):
-        pedidas.pop(0)
+        if pedidas:
+            pedidas.pop(0)
         errores.append(msg)
         anotar(f"  ERROR en la vista: {msg.splitlines()[0]}")
         orig_fallo(msg)
@@ -246,7 +247,7 @@ def _prueba_vivo(carpeta, cli=None):   # (cli: ya no se usa)
             anotar(f"{nombre}: visible en {1000 * (visto - inicio):.0f} ms")
 
     anotar(f"Vista en vivo · {sys.platform} · dibujo propio (sin PhotoCraft)")
-    visto = hasta_ver(lambda vi: True, 120)
+    visto = reloj() if n.vista_ruta else hasta_ver(lambda vi: True, 120)   # (ya se veía: salió al abrir)
     anotar(f"Primera vista al abrir: {visto:.1f} s" if visto else "Primera vista al abrir: NO SE VIO")
     if not visto:
         errores.append("primera vista")

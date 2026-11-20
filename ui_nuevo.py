@@ -5,7 +5,6 @@ Derecha: lienzo punteado con la vista previa, que se actualiza sola mientras esc
 Abajo: barra fija con el saldo y los botones Copiar / WhatsApp / Generar."""
 import math
 import tempfile
-import time
 from pathlib import Path
 
 from PySide6.QtCore import (QAbstractAnimation, QDate, QEasingCurve, QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer,
@@ -22,7 +21,6 @@ import estilo
 import motor
 from lista import MAX_SERVICIOS
 import registro
-import rutas
 from estilo import Atajo, Cifra, Pildora
 from ui_comun import (CTRL, NOMBRES_PAQUETE, Bloque, CampoFecha, Monto, Pasos, Rejilla, TarjetaPaquete, Trabajo, ZonaCaptura,
                       servicio_legible,
@@ -215,55 +213,35 @@ class _PanelVista(QFrame):
 
 class _Lienzo(QWidget):
     """El comprobante flotando sobre el panel, con sombra suave (pintada: no frena la vista en vivo).
-    Cada vista nueva entra con un fundido cruzado sobre la anterior; la primera, subiendo suavemente."""
-
-    SEGUIDAS = 0.6   # s: vistas más seguidas que esto (escribiendo) cambian al instante, sin fundido
+    Cada vista nueva reemplaza a la anterior al instante, sin mezclarlas (un fundido cruzado dejaba ver
+    los textos viejos debajo de los nuevos: «efecto fantasma»); solo la primera entra subiendo suavemente."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pm = None         # la imagen ya escalada al tamaño en pantalla (nítida)
         self.fuente = None     # la imagen original: se usa mientras el zoom está animándose
         self.escalando = False
-        self.previo = None
-        self._t = 1.0          # 0 → 1: fundido de la imagen anterior a la nueva
         self._entrada = 1.0    # 0 → 1: la primera imagen sube y aparece
-        self._ultima = 0.0     # cuándo llegó la imagen anterior
 
     def escalar(self, ancho, alto):
         """Un cuadro del zoom animado: solo cambia el tamaño en pantalla y dibuja la imagen original
         escalada al vuelo (rápido). Al terminar, poner() deja la imagen nítida de ese tamaño."""
         self.escalando = True
-        self.previo = None
         m = MARGEN_LIENZO
         self.resize(round(ancho) + 2 * m, round(alto) + 2 * m)
         self.update()
 
-    def poner(self, pm, fundido=True):
+    def poner(self, pm):
         anterior = self.pm
         self.pm = pm
         self.escalando = False
-        ahora = time.monotonic()
-        seguidas, self._ultima = ahora - self._ultima < self.SEGUIDAS, ahora
         m = MARGEN_LIENZO
         tam = pm.deviceIndependentSize().toSize()
-        mismo_tam = anterior is not None and anterior.deviceIndependentSize().toSize() == tam
         self.resize(tam.width() + 2 * m, tam.height() + 2 * m)
         if anterior is None:
-            self.previo = None
             estilo.animar(self, "_ani_e", 0.0, 1.0, 420, self._paso_e, QEasingCurve.OutCubic)
-        elif fundido and mismo_tam and anterior.cacheKey() != pm.cacheKey() and not seguidas:
-            self.previo = anterior   # un cambio suelto (p. ej. Boda → XV): fundido corto
-            estilo.animar(self, "_ani", 0.0, 1.0, 110, self._paso, QEasingCurve.OutQuad)
         else:
-            if getattr(self, "_ani", None) is not None:
-                self._ani.stop()
-            self.previo = None
-            self._t = 1.0
             self.update()
-
-    def _paso(self, v):
-        self._t = v
-        self.update()
 
     def _paso_e(self, v):
         self._entrada = v
@@ -271,7 +249,7 @@ class _Lienzo(QWidget):
 
     def _sombra(self):
         """La sombra (8 capas redondeadas, cara de pintar en Retina) se dibuja una vez por tamaño y tema,
-        no en cada vista ni en cada cuadro del fundido o del zoom."""
+        no en cada vista ni en cada cuadro del zoom."""
         dpr = self.devicePixelRatioF()
         clave = (self.width(), self.height(), dpr, isDarkTheme())
         if getattr(self, "_sombra_clave", None) != clave:
@@ -315,12 +293,6 @@ class _Lienzo(QWidget):
         if self.escalando and self.fuente is not None and not self.fuente.isNull():
             p.setRenderHint(QPainter.SmoothPixmapTransform)   # zoom animándose: la original, al vuelo
             p.drawPixmap(r, self.fuente, QRectF(self.fuente.rect()))
-        elif self.previo is not None and self._t < 1:
-            p.drawPixmap(r.topLeft(), self.previo)
-            opacidad = p.opacity()
-            p.setOpacity(opacidad * self._t)
-            p.drawPixmap(r.topLeft(), self.pm)
-            p.setOpacity(opacidad)
         else:
             p.drawPixmap(r.topLeft(), self.pm)
         p.setPen(QPen(estilo.c("borde"), 1))
@@ -338,8 +310,7 @@ class _PildoraVivo(QWidget):
         self._on = encendido
         self._fase = 0.0
         self.setFixedHeight(28)
-        self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip("Vista previa en vivo: clic para encenderla o apagarla")
+        self.setToolTip("Vista previa en vivo: el comprobante se actualiza mientras escribes")
         self._ani = QVariantAnimation(self, startValue=0.0, endValue=1.0, duration=1600, loopCount=-1)
         self._ani.setEasingCurve(QEasingCurve.OutCubic)
         self._ani.valueChanged.connect(self._latir)
@@ -377,8 +348,8 @@ class _PildoraVivo(QWidget):
         self.update()
         self.checkedChanged.emit(si)
 
-    def mousePressEvent(self, e):
-        self.setChecked(not self._on)
+    def mousePressEvent(self, e):   # siempre encendida: no se apaga con un clic
+        e.ignore()
 
     def paintEvent(self, e):
         p = QPainter(self)
@@ -871,8 +842,7 @@ class NuevoInterface(QWidget):
         f.setPixelSize(15)
         self.titulo_vista.setFont(f)
         cabv.addWidget(self.titulo_vista)
-        self.en_vivo = _PildoraVivo(bool(cfg.get("vista_en_vivo", True)))
-        self.en_vivo.checkedChanged.connect(self._cambiar_en_vivo)
+        self.en_vivo = _PildoraVivo(True)   # la vista en vivo está siempre encendida
         cabv.addWidget(self.en_vivo)
         self.ring = IndeterminateProgressRing()
         self.ring.setFixedSize(18, 18)
@@ -997,8 +967,8 @@ class NuevoInterface(QWidget):
         self.elegir_paquete(self.paquete, desde_usuario=False)
         self.abrir_bloque(self.b1)
         self._botones_resultado()
-        self._mostrar_plantilla()
-        self._cambio(programar=False)
+        self.estado.setText("Preparando la vista previa…")
+        self._cambio(programar=False)   # (la primera vista la pide la ventana apenas se muestra)
 
     # ================= Bloques y estado =================
     def abrir_bloque(self, bloque):
@@ -1022,8 +992,6 @@ class NuevoInterface(QWidget):
         self.total.setValue(int(paq["precio"] + self._total_extras()))
         if desde_usuario:
             self._cambio()
-            if not self.en_vivo.isChecked() and not (self.ultimo and not self.sin_generar):
-                self._mostrar_plantilla()      # sin vista en vivo: al menos la plantilla del paquete elegido
 
     # ---- Extras (solo para este cliente) ----
     def _catalogo_extras(self):
@@ -1152,17 +1120,6 @@ class NuevoInterface(QWidget):
                 self.tope_vista.start()
 
     # ================= Vista previa =================
-    def poner_en_vivo(self, si):
-        if self.en_vivo.isChecked() != si:
-            self.en_vivo.setChecked(si)
-
-    def _cambiar_en_vivo(self, si):
-        self.cfg["vista_en_vivo"] = si
-        motor.guardar_preferencia("vista_en_vivo", si)
-        if si:
-            self._render_vista()
-        else:
-            self.estado.setText("Vista en vivo apagada · el comprobante se verá al generarlo")
 
     def _datos(self, para_vista=False):
         total, monto = self.total.value(), self.reserva.value()
@@ -1245,12 +1202,6 @@ class NuevoInterface(QWidget):
             return
         self.estado.setText("No se pudo actualizar la vista previa: " + msg.splitlines()[0])
 
-    def _mostrar_plantilla(self):
-        vista = rutas.recurso("PLANTILLAS/VISTA PREVIA.jpg")    # una sola plantilla; la lista va al generar
-        self.estado.setText("Plantilla del comprobante · se actualizará con tus datos")
-        if Path(vista).exists():
-            self._poner_imagen(vista)
-
     def _imagen_actual(self):
         if self.ultimo and not self.sin_generar:
             return self.ultimo
@@ -1309,7 +1260,7 @@ class NuevoInterface(QWidget):
             else:   # más chica que la imagen: se reduce con calidad (al vuelo se vería granulada)
                 img = self.pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             img.setDevicePixelRatio(dpr)
-            self.lienzo.poner(img, fundido=not self.lienzo.escalando)   # tras el zoom: sin fundido
+            self.lienzo.poner(img)
         self.lienzo.setCursor(Qt.OpenHandCursor if self.zoom > 1.001 else Qt.ArrowCursor)
         if self.velo.isVisible():
             self.velo.cubrir()
@@ -1527,7 +1478,7 @@ class NuevoInterface(QWidget):
         self.elegir_paquete(self.paquete, desde_usuario=False)
         self.abrir_bloque(self.b1)
         self._estado_bloques()
-        self._mostrar_plantilla()
+        self._render_vista()   # la vista del comprobante en blanco, directo (sin la plantilla de ejemplo)
         self.titulo_vista.setText("Vista previa")
         self._ver_vista(False)
 
